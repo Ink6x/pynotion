@@ -1,26 +1,13 @@
 """JSON API の統合テスト。"""
-import json
 import uuid
 
 import pytest
 from django.test import Client
 
 from pages.models import Block, BlockType, Page
+from pages.tests.helpers import patch_json, post_json
 
 pytestmark = [pytest.mark.django_db, pytest.mark.integration]
-
-
-@pytest.fixture
-def client() -> Client:
-    return Client()
-
-
-def post_json(client: Client, url: str, payload: dict) -> object:
-    return client.post(url, json.dumps(payload), content_type="application/json")
-
-
-def patch_json(client: Client, url: str, payload: dict) -> object:
-    return client.patch(url, json.dumps(payload), content_type="application/json")
 
 
 class TestPageTreeApi:
@@ -128,7 +115,7 @@ class TestPageMoveApi:
     def test_reorder_after_sibling(self, client: Client) -> None:
         a = Page.objects.create_page(title="A")
         b = Page.objects.create_page(title="B")
-        c = Page.objects.create_page(title="C")
+        Page.objects.create_page(title="C")
         res = post_json(client, f"/api/pages/{a.pk}/move/", {"after_id": str(b.pk)})
         assert res.status_code == 200
         roots = [p.title for p in Page.objects.alive().roots()]
@@ -193,7 +180,7 @@ class TestBlockApi:
     def test_move_block_to_top(self, client: Client) -> None:
         page = Page.objects.create_page(title="p")
         page.blocks.all().delete()
-        b1 = Block.objects.create_block(page=page, type=BlockType.PARAGRAPH, text="1")
+        Block.objects.create_block(page=page, type=BlockType.PARAGRAPH, text="1")
         b2 = Block.objects.create_block(page=page, type=BlockType.PARAGRAPH, text="2")
         res = post_json(client, f"/api/blocks/{b2.pk}/move/", {"after_id": None})
         assert res.status_code == 200
