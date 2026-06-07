@@ -1,0 +1,94 @@
+/* ==========================================================================
+   pynotion デザイントークン — DESIGN.md (Notion 日本語版) 準拠
+   ========================================================================== */
+
+:root {
+  /* Typography */
+  --font-family: NotionInter, Inter, -apple-system, "system-ui", "Segoe UI",
+    Helvetica, "Apple Color Emoji", Arial, sans-serif;
+  --font-mono: SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+
+  --text-display-size: 64px;
+  --text-display-line: 64px;
+  --text-h1-size: 54px;
+  --text-h1-line: 56px;
+  --text-h2-size: 22px;
+  --text-h2-line: 28px;
+  --text-body-size: 16px;
+  --text-body-line: 24px;
+  --text-caption-size: 14px;
+  --text-caption-line: 20px;
+  --text-small-size: 12px;
+  --text-small-line: 16px;
+
+  /* Semantic colors (テーマ非依存) */
+  --color-accent: #2383E2;
+  --color-danger: #EB5757;
+  --color-warning: #F2C94C;
+  --color-success: #6FCF97;
+
+  /* Spacing scale */
+  --space-xs: 4px;
+  --space-s: 8px;
+  --space-m: 16px;
+  --space-l: 24px;
+  --space-xl: 32px;
+  --space-xxl: 64px;
+
+  /* Radius */
+  --radius-s: 6px;
+  --radius-m: 8px;
+  --radius-l: 12px;
+
+  /* Elevation */
+  --shadow-1: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-3: 0 8px 24px rgba(0, 0, 0, 0.2);
+
+  /* Layout */
+  --container-max: 1200px;
+  --sidebar-width: 250px;
+}
+
+/* --------------------------------------------------------------------------
+   ダークテーマ (デフォルト) — ランディング基調の #191918
+   -------------------------------------------------------------------------- */
+:root,
+[data-theme="dark"] {
+  --color-bg: #191918;
+  --color-surface: #2F2F2F;
+  --color-surface-hover: rgba(255, 255, 255, 0.055);
+  --color-text: rgba(255, 255, 255, 0.95);
+  --color-text-secondary: rgba(255, 255, 255, 0.6);
+  --color-text-disabled: rgba(255, 255, 255, 0.3);
+  --color-border: rgba(255, 255, 255, 0.13);
+  --color-border-subtle: rgba(255, 255, 255, 0.08);
+
+  --btn-primary-bg: #FFFFFF;
+  --btn-primary-text: #191918;
+  --btn-ghost-border: rgba(255, 255, 255, 0.2);
+
+  --color-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --color-selection: rgba(35, 131, 226, 0.35);
+}
+
+/* --------------------------------------------------------------------------
+   ライトテーマ
+   -------------------------------------------------------------------------- */
+[data-theme="light"] {
+  --color-bg: #FFFFFF;
+  --color-surface: #F7F7F5;
+  --color-surface-hover: rgba(0, 0, 0, 0.04);
+  --color-text: rgba(0, 0, 0, 0.95);
+  --color-text-secondary: rgba(0, 0, 0, 0.6);
+  --color-text-disabled: rgba(0, 0, 0, 0.3);
+  --color-border: rgba(0, 0, 0, 0.13);
+  --color-border-subtle: rgba(0, 0, 0, 0.08);
+
+  --btn-primary-bg: #000000;
+  --btn-primary-text: #FFFFFF;
+  --btn-ghost-border: rgba(0, 0, 0, 0.2);
+
+  --color-card-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --color-selection: rgba(35, 131, 226, 0.2);
+}

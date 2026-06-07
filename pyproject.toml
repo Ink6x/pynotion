@@ -18,6 +18,10 @@ dev = [
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["test_*.py"]
 testpaths = ["pages/tests"]
+markers = [
+    "unit: 単体テスト",
+    "integration: 統合テスト",
+]
 
 [tool.ruff]
 line-length = 100

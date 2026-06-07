@@ -1,0 +1,174 @@
+/* ==========================================================================
+   サイドバー: ワークスペース / ページツリー、ページヘッダー (アイコン+タイトル)
+   ========================================================================== */
+
+.workspace-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+  padding: var(--space-s);
+  font-size: var(--text-caption-size);
+  font-weight: 600;
+}
+
+.workspace-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-s);
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+  font-size: var(--text-small-size);
+  font-weight: 700;
+}
+
+.sidebar-section {
+  margin-top: var(--space-m);
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-s) var(--space-xs);
+}
+
+/* --------------------------------------------------------------------------
+   ページツリー
+   -------------------------------------------------------------------------- */
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 28px;
+  padding: 2px var(--space-s);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption-size);
+  user-select: none;
+}
+
+.tree-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.tree-row.is-active {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.tree-toggle {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: var(--radius-s);
+  background: transparent;
+  color: var(--color-text-disabled);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tree-toggle:hover {
+  background: var(--color-border);
+  color: var(--color-text);
+}
+
+.tree-icon {
+  flex-shrink: 0;
+  font-size: var(--text-caption-size);
+}
+
+.tree-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+
+.tree-row:hover .tree-actions {
+  display: flex;
+}
+
+.tree-actions .icon-btn {
+  width: 20px;
+  height: 20px;
+  font-size: var(--text-small-size);
+}
+
+.tree-empty {
+  padding: var(--space-s);
+}
+
+/* --------------------------------------------------------------------------
+   ページヘッダー (アイコン + タイトル)
+   -------------------------------------------------------------------------- */
+.page-icon {
+  width: 72px;
+  min-height: 72px;
+  font-size: 64px;
+  line-height: 1.1;
+  border-radius: var(--radius-m);
+  cursor: pointer;
+  user-select: none;
+}
+
+.page-icon:hover {
+  background: var(--color-surface-hover);
+}
+
+.page-icon.is-empty::before {
+  content: "アイコンを追加";
+  display: inline-block;
+  font-size: var(--text-caption-size);
+  color: var(--color-text-disabled);
+  padding: var(--space-s) 0;
+}
+
+.page-title {
+  margin: var(--space-s) 0 var(--space-l);
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.1;
+  outline: none;
+}
+
+.page-title:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-text-disabled);
+}
+
+.page-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-m);
+  padding-top: 20vh;
+}
+
+/* --------------------------------------------------------------------------
+   アイコンピッカー
+   -------------------------------------------------------------------------- */
+.icon-picker .icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  padding: var(--space-xs);
+}
+
+.icon-choice {
+  width: 32px;
+  height: 32px;
+  font-size: 20px;
+}

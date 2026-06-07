@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/sidebar.css' %}">
+<link rel="stylesheet" href="{% static 'css/editor.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-top">
+      <div class="workspace-name">
+        <span class="workspace-icon">P</span>
+        <span>pynotion</span>
+      </div>
+      <button class="menu-item" id="search-button" type="button">
+        🔍 検索 <span class="menu-item-hint"><kbd>Ctrl</kbd>+<kbd>K</kbd></span>
+      </button>
+      <button class="menu-item" id="trash-button" type="button">🗑️ ゴミ箱</button>
+      <button class="menu-item" id="theme-toggle" type="button">🌓 テーマ切替</button>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-header">
+        <span class="text-small text-secondary">プライベート</span>
+        <button class="icon-btn" id="new-root-page" type="button" title="ページを追加">＋</button>
+      </div>
+      <nav id="page-tree" class="page-tree"></nav>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="page-container" id="page-container">
+      <div id="page-empty" class="page-empty">
+        <p class="text-secondary">ページを選択するか、新しいページを作成してください。</p>
+        <button class="btn btn-primary" id="empty-new-page" type="button">新規ページ</button>
+      </div>
+      <div id="page-view" class="hidden">
+        <div class="page-icon" id="page-icon" title="アイコンを変更"></div>
+        <h1 class="page-title" id="page-title" contenteditable="true" data-placeholder="無題"></h1>
+        <div id="editor" class="editor"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="modal-root"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/api.js' %}"></script>
+<script src="{% static 'js/sidebar.js' %}"></script>
+<script src="{% static 'js/editor.js' %}"></script>
+<script src="{% static 'js/slashmenu.js' %}"></script>
+<script src="{% static 'js/modals.js' %}"></script>
+<script src="{% static 'js/app.js' %}"></script>
+{% endblock %}
