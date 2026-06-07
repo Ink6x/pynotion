@@ -308,7 +308,7 @@ const Editor = (() => {
       if (block.type === "code" || e.shiftKey) {
         // コード内 / Shift+Enter は改行を挿入
         e.preventDefault();
-        document.execCommand("insertText", false, "\n");
+        insertNewline(id);
         return;
       }
       e.preventDefault();
@@ -347,6 +347,28 @@ const Editor = (() => {
         }
       }
     }
+  }
+
+  /**
+   * ブロック内改行 (Shift+Enter / コードブロックの Enter)。
+   * execCommand("insertText") は Chrome が <br>/<div> を挿入して
+   * textContent から改行が失われるため、文字列を直接操作する。
+   * @param {string} id
+   */
+  function insertNewline(id) {
+    const el = contentEl(id);
+    if (!el) return;
+    const offset = caretOffset(el);
+    const text = el.textContent;
+    let newText = text.slice(0, offset) + "\n" + text.slice(offset);
+    // 末尾の改行は単体では描画されずキャレットも置けないため、もう 1 つ足す
+    if (offset + 1 === newText.length) {
+      newText += "\n";
+    }
+    el.textContent = newText;
+    setCaret(el, offset + 1);
+    patchBlock(id, { text: newText });
+    scheduleSave(id);
   }
 
   /** @param {number} index @returns {object | null} */
