@@ -75,6 +75,19 @@ const Editor = (() => {
     handle.className = "block-handle";
     handle.textContent = "⠿";
     handle.title = "ドラッグして移動";
+    handle.draggable = true;
+    handle.addEventListener("dragstart", (e) => {
+      dragState.id = block.id;
+      row.classList.add("is-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", block.id);
+    });
+    handle.addEventListener("dragend", () => {
+      dragState.id = null;
+      dragState.afterId = undefined;
+      row.classList.remove("is-dragging");
+      clearDropIndicator();
+    });
     row.appendChild(handle);
 
     if (block.type === "divider") {
@@ -209,7 +222,9 @@ const Editor = (() => {
     const block = blocks[blockIndex(id)];
     const text = el.textContent;
 
-    if (block.type === "paragraph") {
+    if (window.SlashMenu) SlashMenu.onInput(id, el);
+
+    if (block.type === "paragraph" && !(window.SlashMenu && SlashMenu.isOpen())) {
       const rule = AUTOFORMAT_RULES.find((r) => r.pattern.test(text));
       if (rule) {
         applyAutoformat(id, rule.type);
@@ -285,6 +300,7 @@ const Editor = (() => {
   /** @param {KeyboardEvent} e @param {string} id */
   function handleKeydown(e, id) {
     if (e.isComposing) return; // IME 変換確定の Enter 等は奪わない
+    if (window.SlashMenu && SlashMenu.handleKey(e)) return;
     const block = blocks[blockIndex(id)];
     if (!block) return;
 
@@ -378,8 +394,10 @@ const Editor = (() => {
    * @param {object} block 挿入位置の直前ブロック
    * @param {string} type
    * @param {string} text
+   * @param {boolean} [focus=true]
+   * @returns {Promise<object | null>} 作成されたブロック
    */
-  async function insertBlockAfter(block, type, text) {
+  async function insertBlockAfter(block, type, text, focus = true) {
     try {
       const data = await API.createBlock(page.id, { type, text, after_id: block.id });
       const created = data.block;
@@ -387,10 +405,43 @@ const Editor = (() => {
       blocks = [...blocks.slice(0, index + 1), created, ...blocks.slice(index + 1)];
       const row = root().querySelector(`[data-block-id="${block.id}"]`);
       row.after(renderBlock(created));
-      focusBlock(created.id, 0);
+      if (focus) focusBlock(created.id, 0);
+      return created;
     } catch (err) {
       App.toast("ブロックの作成に失敗しました: " + err.message);
+      return null;
     }
+  }
+
+  /**
+   * スラッシュメニュー選択の適用。コマンド文字列を除去しタイプ変換する。
+   * @param {string} id
+   * @param {string} type
+   * @param {string} cleanText 「/コマンド」を取り除いた本文
+   * @param {number} caretPos 復元するキャレット位置
+   */
+  async function applySlashCommand(id, type, cleanText, caretPos) {
+    const block = blocks[blockIndex(id)];
+    if (!block) return;
+
+    if (type === "divider") {
+      patchBlock(id, { text: cleanText });
+      const el = contentEl(id);
+      if (el) el.textContent = cleanText;
+      await save(id, { text: cleanText });
+      if (cleanText === "") {
+        await convertToDivider(id);
+        return;
+      }
+      const divider = await insertBlockAfter(blocks[blockIndex(id)], "divider", "", false);
+      if (divider) await insertBlockAfter(divider, "paragraph", "");
+      return;
+    }
+
+    patchBlock(id, { type, text: cleanText });
+    rerenderBlock(id);
+    focusBlock(id, Math.min(caretPos, cleanText.length));
+    await save(id, { type, text: cleanText });
   }
 
   /** ページ末尾に段落を追加する。 */
@@ -451,7 +502,73 @@ const Editor = (() => {
   }
 
   /* ----------------------------------------------------------------------
-     余白クリックで末尾に段落を追加 (Notion の挙動)
+     ドラッグ & ドロップによる並べ替え
+     ---------------------------------------------------------------------- */
+  /** @type {{id: string | null, afterId: string | null | undefined}} */
+  const dragState = { id: null, afterId: undefined };
+
+  function clearDropIndicator() {
+    root()
+      .querySelectorAll(".drop-target, .drop-target-top")
+      .forEach((el) => el.classList.remove("drop-target", "drop-target-top"));
+  }
+
+  /** @param {DragEvent} e */
+  function handleDragOver(e) {
+    if (!dragState.id) return;
+    const row = e.target.closest(".block");
+    if (!row) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+
+    const rect = row.getBoundingClientRect();
+    const below = e.clientY > rect.top + rect.height / 2;
+    clearDropIndicator();
+
+    if (below) {
+      dragState.afterId = row.dataset.blockId;
+      row.classList.add("drop-target");
+    } else {
+      const index = blockIndex(row.dataset.blockId);
+      dragState.afterId = index > 0 ? blocks[index - 1].id : null;
+      if (index > 0) {
+        const prevRow = root().querySelector(`[data-block-id="${blocks[index - 1].id}"]`);
+        if (prevRow) prevRow.classList.add("drop-target");
+      } else {
+        row.classList.add("drop-target-top");
+      }
+    }
+  }
+
+  /** @param {DragEvent} e */
+  async function handleDrop(e) {
+    if (!dragState.id || dragState.afterId === undefined) return;
+    e.preventDefault();
+    const id = dragState.id;
+    const afterId = dragState.afterId === id ? undefined : dragState.afterId;
+    clearDropIndicator();
+    if (afterId === undefined) return;
+
+    const index = blockIndex(id);
+    // 同じ位置へのドロップは無視
+    if ((index > 0 && blocks[index - 1].id === afterId) || (index === 0 && afterId === null)) {
+      return;
+    }
+
+    try {
+      await API.moveBlock(id, { after_id: afterId });
+      const moved = blocks[index];
+      const rest = blocks.filter((b) => b.id !== id);
+      const insertAt = afterId === null ? 0 : rest.findIndex((b) => b.id === afterId) + 1;
+      blocks = [...rest.slice(0, insertAt), moved, ...rest.slice(insertAt)];
+      render();
+    } catch (err) {
+      App.toast("並べ替えに失敗しました: " + err.message);
+    }
+  }
+
+  /* ----------------------------------------------------------------------
+     初期化: 余白クリックで末尾に段落を追加 (Notion の挙動) + DnD
      ---------------------------------------------------------------------- */
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("page-container").addEventListener("click", (e) => {
@@ -463,7 +580,9 @@ const Editor = (() => {
         appendParagraph();
       }
     });
+    root().addEventListener("dragover", handleDragOver);
+    root().addEventListener("drop", handleDrop);
   });
 
-  return { open, focusFirstBlock };
+  return { open, focusFirstBlock, applySlashCommand, caretOffset };
 })();
