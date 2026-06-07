@@ -1,0 +1,59 @@
+# ローカル検証用スタック (web / postgres / redis)
+#
+#   docker compose up --build
+#   → http://localhost:8000 (healthz: http://localhost:8000/healthz)
+#
+# DJANGO_SECRET_KEY は .env で上書き可能 (デフォルトはローカル専用)。
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-local-compose-only-secret-key-0123456789abcdef}
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DATABASE_URL: postgres://pynotion:pynotion@db:5432/pynotion
+      REDIS_URL: redis://redis:6379/0
+      # ローカルは TLS 終端が無いため SSL リダイレクトを無効化
+      DJANGO_SECURE_SSL_REDIRECT: "0"
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --access-logfile -"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pynotion
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pynotion}
+      POSTGRES_DB: pynotion
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pynotion"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:

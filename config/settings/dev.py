@@ -9,6 +9,9 @@ environ.Env.read_env(BASE_DIR / ".env", overwrite=False)
 
 DEBUG = True
 
+# dev は collectstatic せずに配信する (STATIC_ROOT 未作成の警告も抑止)
+WHITENOISE_AUTOREFRESH = True
+
 SECRET_KEY = env(
     "DJANGO_SECRET_KEY",
     default="django-insecure-dev-only-key-do-not-use-in-production",

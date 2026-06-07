@@ -18,8 +18,35 @@ DATABASES = {"default": env.db("DATABASE_URL")}
 
 CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 
+# 静的配信: WhiteNoise (圧縮 + マニフェストハッシュ)
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
+# 構造化ログ (1 行 1 JSON、stdout へ)
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "json": {"()": "config.logging.JsonFormatter"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "json"},
+    },
+    "root": {"handlers": ["console"], "level": "INFO"},
+    "loggers": {
+        "django.request": {"level": "WARNING"},
+        "django.security": {"level": "WARNING"},
+    },
+}
+
 # --- HTTPS / セキュリティ強化 (check --deploy 対応) ---
-SECURE_SSL_REDIRECT = True
+# TLS 終端がリバースプロキシより手前にあるローカル compose 検証では
+# DJANGO_SECURE_SSL_REDIRECT=0 で無効化できる (本番デフォルトは有効)
+SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=True)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
