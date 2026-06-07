@@ -157,6 +157,15 @@ const App = (() => {
     document.querySelectorAll("#modal-root .popover").forEach((el) => el.remove());
   }
 
+  /** 一時的な通知を表示する。 @param {string} message */
+  function toast(message) {
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.textContent = message;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+  }
+
   /** @param {string} emoji 空文字で削除 */
   async function setIcon(emoji) {
     closePopovers();
@@ -169,5 +178,5 @@ const App = (() => {
 
   document.addEventListener("DOMContentLoaded", init);
 
-  return { openPage, createPage, onPageTrashed, showEmpty, closePopovers };
+  return { openPage, createPage, onPageTrashed, showEmpty, closePopovers, toast };
 })();
