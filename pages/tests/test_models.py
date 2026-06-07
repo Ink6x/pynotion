@@ -1,4 +1,6 @@
 """Page / Block モデルのテスト。"""
+from datetime import timedelta
+
 import pytest
 
 from pages.models import Block, BlockType, Page
@@ -66,6 +68,13 @@ class TestPage:
         parent = Page.objects.create_page(title="親")
         child = Page.objects.create_page(title="子", parent=parent)
         child.soft_delete()
+        # soft_delete は timezone.now() を使うため、時計解像度次第で
+        # 親子の deleted_at が一致しフレークする。「先に削除済み」の
+        # 前提を明示的なタイムスタンプ差で決定化する。
+        Page.objects.filter(pk=child.pk).update(
+            deleted_at=child.deleted_at - timedelta(seconds=1)
+        )
+        child.refresh_from_db()
         parent.soft_delete()
         parent.restore()
         child.refresh_from_db()
