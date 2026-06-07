@@ -33,6 +33,8 @@ LOGOUT_REDIRECT_URL = "accounts:login"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise は SecurityMiddleware の直後 (静的配信の本番対応)
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -77,3 +79,6 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Redis (Phase 2 以降のキャッシュ / Channels 用。healthz の疎通確認にも使う)
+REDIS_URL = env("REDIS_URL", default=None)
