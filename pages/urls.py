@@ -1,9 +1,11 @@
 """pages アプリの URL ルーティング。"""
 from django.urls import path
 
-from . import api_blocks, api_pages
+from . import api_blocks, api_pages, views
 
 urlpatterns = [
+    # アプリシェル
+    path("", views.index, name="index"),
     # ページ API
     path("api/pages/", api_pages.page_collection),
     path("api/pages/trash/", api_pages.trash_list),
