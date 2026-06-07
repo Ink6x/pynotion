@@ -15,6 +15,15 @@ dev = [
     "pytest-cov>=5.0",
 ]
 
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+# 配布パッケージではない (Django プロジェクト) ため、
+# setuptools のパッケージ自動検出を無効化する
+[tool.setuptools]
+packages = []
+
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.dev"
 python_files = ["test_*.py"]
