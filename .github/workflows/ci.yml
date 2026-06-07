@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pipx run ruff check .
+
+  test:
+    name: Test (pytest, coverage >= 90%)
+    needs: lint
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install dependencies
+        run: pip install -e .[dev]
+      - name: Run tests with coverage gate
+        run: pytest --cov=pages --cov=config --cov-fail-under=90
+      - name: Deploy check (prod settings)
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.prod
+          DJANGO_SECRET_KEY: ${{ github.sha }}-ci-only-dummy-secret-key-0123456789
+          DJANGO_ALLOWED_HOSTS: example.com
+          DATABASE_URL: sqlite:///ci-check.sqlite3
+        run: python manage.py check --deploy --fail-level WARNING
+
+  docker:
+    name: Docker build
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Dockerfile は Phase 1-I 後半 (feat/docker-prod) で追加される。
+      # それまでは存在チェックでスキップし、追加後は自動で有効になる。
+      - name: Build image
+        if: ${{ hashFiles('Dockerfile') != '' }}
+        run: docker build -t pynotion:ci .
+      - name: Skip (Dockerfile not yet added)
+        if: ${{ hashFiles('Dockerfile') == '' }}
+        run: echo "Dockerfile が未追加のためスキップ (feat/docker-prod で有効化)"
