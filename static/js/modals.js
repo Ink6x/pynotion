@@ -204,6 +204,143 @@ const Modals = (() => {
   }
 
   /* ----------------------------------------------------------------------
+     共有モーダル
+     ---------------------------------------------------------------------- */
+  const ROLE_LABELS = {
+    viewer: "閲覧者",
+    commenter: "コメント可",
+    editor: "編集者",
+    full_access: "フルアクセス",
+  };
+
+  /** @returns {HTMLSelectElement} */
+  function roleSelect(selected) {
+    const select = document.createElement("select");
+    select.className = "input share-role-select";
+    Object.entries(ROLE_LABELS).forEach(([value, label]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      option.selected = value === selected;
+      select.appendChild(option);
+    });
+    return select;
+  }
+
+  async function openShare() {
+    const pageId = App.currentPageId();
+    if (!pageId) return;
+
+    const modal = document.createElement("div");
+    modal.className = "modal";
+
+    const header = document.createElement("div");
+    header.className = "trash-header";
+    header.textContent = "🔗 共有";
+
+    const form = document.createElement("div");
+    form.className = "share-form";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "input";
+    input.placeholder = "ユーザー名";
+    const select = roleSelect("viewer");
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "btn btn-primary";
+    add.textContent = "共有";
+    form.append(input, select, add);
+
+    const list = document.createElement("div");
+    list.className = "share-list";
+
+    modal.append(header, form, list);
+    showModal(modal);
+    input.focus();
+
+    const submit = async () => {
+      const username = input.value.trim();
+      if (!username || add.disabled) return;
+      add.disabled = true;
+      try {
+        await API.upsertShare(pageId, { username, role: select.value });
+        input.value = "";
+        await renderShares(pageId, list);
+      } catch (err) {
+        App.toast("共有に失敗しました: " + err.message);
+      } finally {
+        add.disabled = false;
+      }
+    };
+    add.addEventListener("click", submit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.isComposing) {
+        e.preventDefault();
+        submit();
+      }
+    });
+
+    await renderShares(pageId, list);
+  }
+
+  /** @param {string} pageId @param {HTMLElement} list */
+  async function renderShares(pageId, list) {
+    try {
+      const data = await API.listShares(pageId);
+      list.innerHTML = "";
+      if (data.shares.length === 0) {
+        list.innerHTML =
+          '<div class="search-hint text-small text-secondary">まだ誰にも共有されていません</div>';
+        return;
+      }
+      data.shares.forEach((share) => list.appendChild(renderShareRow(pageId, share, list)));
+    } catch (err) {
+      closeModal();
+      App.toast(
+        err.status === 403
+          ? "共有を管理できるのはフルアクセス権限のみです"
+          : "共有リストの取得に失敗しました: " + err.message
+      );
+    }
+  }
+
+  /** @param {string} pageId @param {object} share @param {HTMLElement} list */
+  function renderShareRow(pageId, share, list) {
+    const row = document.createElement("div");
+    row.className = "share-row";
+
+    const name = document.createElement("span");
+    name.className = "share-name";
+    name.textContent = share.username;
+
+    const select = roleSelect(share.role);
+    select.addEventListener("change", async () => {
+      try {
+        await API.upsertShare(pageId, { username: share.username, role: select.value });
+      } catch (err) {
+        App.toast("ロール変更に失敗しました: " + err.message);
+        await renderShares(pageId, list);
+      }
+    });
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "btn btn-ghost trash-action is-danger-text";
+    remove.textContent = "解除";
+    remove.addEventListener("click", async () => {
+      try {
+        await API.removeShare(pageId, share.user_id);
+        await renderShares(pageId, list);
+      } catch (err) {
+        App.toast("共有解除に失敗しました: " + err.message);
+      }
+    });
+
+    row.append(name, select, remove);
+    return row;
+  }
+
+  /* ----------------------------------------------------------------------
      初期化
      ---------------------------------------------------------------------- */
   document.addEventListener("keydown", (e) => {
@@ -218,7 +355,8 @@ const Modals = (() => {
   document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("search-button").addEventListener("click", openSearch);
     document.getElementById("trash-button").addEventListener("click", openTrash);
+    document.getElementById("share-button").addEventListener("click", openShare);
   });
 
-  return { openSearch, openTrash, closeModal };
+  return { openSearch, openTrash, openShare, closeModal };
 })();

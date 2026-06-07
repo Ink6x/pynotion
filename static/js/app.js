@@ -182,7 +182,20 @@ const App = (() => {
     Sidebar.updateLabel(currentPage.id, { icon: emoji });
   }
 
+  /** @returns {string | null} 現在開いているページの id */
+  function currentPageId() {
+    return currentPage ? currentPage.id : null;
+  }
+
   document.addEventListener("DOMContentLoaded", init);
 
-  return { openPage, createPage, onPageTrashed, showEmpty, closePopovers, toast };
+  return {
+    openPage,
+    createPage,
+    onPageTrashed,
+    showEmpty,
+    closePopovers,
+    toast,
+    currentPageId,
+  };
 })();
