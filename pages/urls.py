@@ -1,7 +1,7 @@
 """pages アプリの URL ルーティング。"""
 from django.urls import path
 
-from . import api_blocks, api_pages, views
+from . import api_blocks, api_pages, api_shares, views
 
 urlpatterns = [
     # アプリシェル
@@ -13,6 +13,9 @@ urlpatterns = [
     path("api/pages/<uuid:page_id>/restore/", api_pages.page_restore),
     path("api/pages/<uuid:page_id>/permanent/", api_pages.page_permanent_delete),
     path("api/pages/<uuid:page_id>/move/", api_pages.page_move),
+    # 共有 API
+    path("api/pages/<uuid:page_id>/shares/", api_shares.share_collection),
+    path("api/pages/<uuid:page_id>/shares/<int:user_id>/", api_shares.share_detail),
     # ブロック API
     path("api/pages/<uuid:page_id>/blocks/", api_blocks.block_collection),
     path("api/blocks/<uuid:block_id>/", api_blocks.block_detail),

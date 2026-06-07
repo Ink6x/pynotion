@@ -34,7 +34,9 @@ const API = (() => {
     }
     if (!res.ok || !json || json.ok === false) {
       const message = (json && json.error) || "HTTP " + res.status;
-      throw new Error(message);
+      const error = new Error(message);
+      error.status = res.status;
+      throw error;
     }
     return json.data;
   }
@@ -51,6 +53,11 @@ const API = (() => {
     movePage: (id, payload) => request("POST", `/api/pages/${id}/move/`, payload),
     trashList: () => request("GET", "/api/pages/trash/"),
     search: (q) => request("GET", "/api/search/?q=" + encodeURIComponent(q)),
+    // 共有
+    listShares: (pageId) => request("GET", `/api/pages/${pageId}/shares/`),
+    upsertShare: (pageId, payload) => request("POST", `/api/pages/${pageId}/shares/`, payload),
+    removeShare: (pageId, userId) =>
+      request("DELETE", `/api/pages/${pageId}/shares/${userId}/`),
     // ブロック
     createBlock: (pageId, payload) => request("POST", `/api/pages/${pageId}/blocks/`, payload),
     updateBlock: (id, payload) => request("PATCH", `/api/blocks/${id}/`, payload),
