@@ -241,6 +241,73 @@ body {
 }
 
 /* --------------------------------------------------------------------------
+   検索モーダル / ゴミ箱モーダル
+   -------------------------------------------------------------------------- */
+.search-input-wrap {
+  padding: var(--space-m);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.search-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  height: auto;
+  padding: 0;
+}
+
+.search-input:focus {
+  border: none;
+}
+
+.search-results,
+.trash-list {
+  overflow-y: auto;
+  padding: var(--space-s);
+}
+
+.search-hint {
+  padding: var(--space-m);
+  text-align: center;
+}
+
+.trash-header {
+  padding: var(--space-m);
+  font-weight: 600;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.trash-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+  padding: var(--space-s);
+  border-radius: var(--radius-s);
+}
+
+.trash-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.trash-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-caption-size);
+}
+
+.trash-action {
+  font-size: var(--text-small-size);
+  padding: 4px 10px;
+}
+
+.is-danger-text {
+  color: var(--color-danger);
+}
+
+/* --------------------------------------------------------------------------
    ユーティリティ
    -------------------------------------------------------------------------- */
 .text-secondary {
