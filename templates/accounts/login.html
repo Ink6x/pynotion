@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}ログイン — pynotion{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/auth.css' %}">
+{% endblock %}
+
+{% block content %}
+<main class="auth-page">
+  <section class="auth-card">
+    <h1>pynotion</h1>
+    <p class="auth-sub">ログインしてワークスペースを開く</p>
+
+    {% if form.non_field_errors %}
+    <div class="auth-errors">
+      {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="auth-field">
+        <label for="{{ form.username.id_for_label }}">ユーザー名</label>
+        <input type="text" name="username" id="{{ form.username.id_for_label }}"
+               autocomplete="username" autofocus required>
+      </div>
+      <div class="auth-field">
+        <label for="{{ form.password.id_for_label }}">パスワード</label>
+        <input type="password" name="password" id="{{ form.password.id_for_label }}"
+               autocomplete="current-password" required>
+      </div>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button type="submit" class="auth-submit">ログイン</button>
+    </form>
+
+    <p class="auth-alt">アカウントがない場合は <a href="{% url 'accounts:signup' %}">サインアップ</a></p>
+  </section>
+</main>
+{% endblock %}
