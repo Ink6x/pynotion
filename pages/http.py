@@ -30,13 +30,25 @@ def parse_body(request: HttpRequest) -> dict:
 
 
 def json_api(view: Callable) -> Callable:
-    """バリデーションエラー (ValueError) を 400 レスポンスに変換する。"""
+    """API 共通処理 — 認証チェックとエラー変換。
+
+    - 未認証は 401 (SPA 用 API のためリダイレクトではなく JSON で返す)
+    - ValueError (バリデーション) は 400
+    - PermissionError (認可不足) は 403
+    - LookupError (アクセス権なし = 存在を漏らさない) は 404
+    """
 
     @functools.wraps(view)
     def wrapper(request: HttpRequest, *args: object, **kwargs: object) -> JsonResponse:
+        if not request.user.is_authenticated:
+            return fail("ログインが必要です", status=401)
         try:
             return view(request, *args, **kwargs)
         except ValueError as exc:
             return fail(str(exc), status=400)
+        except PermissionError as exc:
+            return fail(str(exc), status=403)
+        except LookupError as exc:
+            return fail(str(exc), status=404)
 
     return wrapper

@@ -1,10 +1,35 @@
 """Page / Block — Notion のページとブロックを表すモデル。"""
 import uuid
 
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
 from .ordering import key_between
+
+
+class Role(models.TextChoices):
+    """ページ共有のロール。値の強さは ROLE_WEIGHT で比較する。"""
+
+    VIEWER = "viewer", "閲覧者"
+    COMMENTER = "commenter", "コメント可"
+    EDITOR = "editor", "編集者"
+    FULL_ACCESS = "full_access", "フルアクセス"
+
+
+ROLE_WEIGHT = {
+    Role.VIEWER: 1,
+    Role.COMMENTER: 2,
+    Role.EDITOR: 3,
+    Role.FULL_ACCESS: 4,
+}
+
+
+def role_satisfies(role: "Role | None", min_role: "Role") -> bool:
+    """role が min_role 以上の強さを持つか。"""
+    if role is None:
+        return False
+    return ROLE_WEIGHT[Role(role)] >= ROLE_WEIGHT[min_role]
 
 
 class BlockType(models.TextChoices):
@@ -37,6 +62,7 @@ class PageManager(models.Manager.from_queryset(PageQuerySet)):
     def create_page(
         self,
         *,
+        owner,
         title: str = "",
         icon: str = "",
         parent: "Page | None" = None,
@@ -44,7 +70,9 @@ class PageManager(models.Manager.from_queryset(PageQuerySet)):
     ) -> "Page":
         """ページを作成し、空の段落ブロックを 1 つ持たせる。"""
         position = self._next_position(parent=parent, after=after)
-        page = self.create(title=title, icon=icon, parent=parent, position=position)
+        page = self.create(
+            owner=owner, title=title, icon=icon, parent=parent, position=position
+        )
         Block.objects.create_block(page=page, type=BlockType.PARAGRAPH)
         return page
 
@@ -78,6 +106,11 @@ class Page(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.TextField(blank=True, default="")
     icon = models.CharField(max_length=16, blank=True, default="")
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="owned_pages",
+    )
     parent = models.ForeignKey(
         "self",
         null=True,
@@ -112,6 +145,55 @@ class Page(models.Model):
             frontier = [child.pk for child in children]
         return result
 
+    def ancestor_ids(self) -> list[uuid.UUID]:
+        """祖先ページの id 列 (親 → ルートの順)。クエリ数 = 深さ - 1。
+
+        is_deleted は見ない。restore() が「親がゴミ箱なら子をルートへ
+        付け替える」ため、生きているページの祖先は常に生きている
+        (= ゴミ箱の祖先共有が生きたページへ漏れることはない) 。
+        """
+        ids: list[uuid.UUID] = []
+        seen = {self.pk}
+        current = self.parent_id
+        while current is not None and current not in seen:
+            ids.append(current)
+            seen.add(current)
+            current = (
+                Page.objects.filter(pk=current).values_list("parent_id", flat=True).first()
+            )
+        return ids
+
+    def effective_role(self, user) -> "Role | None":
+        """user がこのページに対して持つ実効ロール。
+
+        - owner は常に full_access
+        - 自身と祖先チェーン上の PageShare を 1 クエリで取得し、
+          最も強いロールを返す (親で共有されたページは子にも継承される)
+        - どちらも無ければ None (アクセス不可)
+        """
+        if not user.is_authenticated:
+            return None
+        cached = getattr(self, "_role_cache", None)
+        if cached is not None and cached[0] == user.pk:
+            return cached[1]
+        role = self._compute_effective_role(user)
+        self._role_cache = (user.pk, role)
+        return role
+
+    def _compute_effective_role(self, user) -> "Role | None":
+        if self.owner_id == user.pk:
+            return Role.FULL_ACCESS
+        page_ids = [self.pk, *self.ancestor_ids()]
+        # list() で 1 回だけ評価する (bool 判定と max で二重評価しない)
+        roles = list(
+            PageShare.objects.filter(page_id__in=page_ids, user=user).values_list(
+                "role", flat=True
+            )
+        )
+        if not roles:
+            return None
+        return max((Role(r) for r in roles), key=lambda r: ROLE_WEIGHT[r])
+
     def soft_delete(self) -> None:
         """自身と未削除の子孫をゴミ箱へ移動する。
 
@@ -145,6 +227,64 @@ class Page(models.Model):
         # (生きているのにツリーへ表示されない「孤児」を防ぐ)
         if self.parent is not None and self.parent.is_deleted:
             Page.objects.move(self, parent=None, after=None)
+
+
+class PageShare(models.Model):
+    """ページの共有。親ページの共有は子孫へ継承される (effective_role 参照)。"""
+
+    page = models.ForeignKey(Page, on_delete=models.CASCADE, related_name="shares")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="page_shares",
+    )
+    role = models.CharField(max_length=16, choices=Role.choices, default=Role.VIEWER)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["page", "user"], name="unique_share_per_user"),
+            # ORM 直接操作でも不正な role を保存させない (DB レベル防衛)
+            models.CheckConstraint(
+                condition=models.Q(role__in=[choice[0] for choice in Role.choices]),
+                name="valid_share_role",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["user", "page"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.page} → {self.user} ({self.get_role_display()})"
+
+
+def accessible_page_ids(user) -> set[uuid.UUID]:
+    """user が閲覧可能な「生きている」ページ id の集合。
+
+    所有ページ + 直接共有されたページ + その子孫 (共有の継承)。
+    クエリ数 = 2 + 共有サブツリーの深さ。
+    """
+    owned = set(
+        Page.objects.alive().filter(owner=user).values_list("pk", flat=True)
+    )
+    shared = set(
+        Page.objects.alive()
+        .filter(shares__user=user)
+        .values_list("pk", flat=True)
+    )
+    ids = owned | shared
+    # 共有ページの子孫を幅優先で収集 (所有分は親子とも owned に含まれている)
+    frontier = shared - owned
+    while frontier:
+        children = set(
+            Page.objects.alive()
+            .filter(parent_id__in=frontier)
+            .values_list("pk", flat=True)
+        )
+        frontier = children - ids
+        ids |= children
+    return ids
 
 
 class BlockManager(models.Manager):
