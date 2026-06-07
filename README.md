@@ -82,6 +82,12 @@ templates/        base.html / app.html
   復元は「同時に削除されたもの」だけを対象にする
 - **API**: 全レスポンスを `{ok, data, error}` 封筒で統一
 
+## 開発計画
+
+ポートフォリオ強化のロードマップ(認証/RBAC → PostgreSQL/全文検索 →
+リアルタイム共同編集 → データベースビュー)は
+[docs/plan/](./docs/plan/README.md) で管理している。
+
 ## テスト
 
 ```bash
