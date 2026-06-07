@@ -7,29 +7,29 @@
 
 ### A. 認証・マルチユーザー・RBAC
 
-- [ ] `authenticated_client` フィクスチャ整備(既存テストの移行準備)
-- [ ] `accounts` アプリ作成、カスタムユーザー(`AUTH_USER_MODEL`)
-- [ ] サインアップ / ログイン / ログアウト(セッション認証)
-- [ ] `Page.owner` 追加 + データマイグレーション
-- [ ] `PageShare(page, user, role)` モデル(viewer / commenter / editor / full_access)
-- [ ] `Page.effective_role(user)` — 祖先チェーンを N+1 なしで解決
-- [ ] `@require_role` デコレータ + `PermissionError → 403`(`http.py` 拡張)
-- [ ] 全 API エンドポイントへ認可チェック適用
-- [ ] ページ移動・ソフトデリートと権限の整合テスト
-- [ ] 共有 UI(共有モーダル・ロール選択)
-- [ ] 既存テストの認証対応 + 認可テスト追加(カバレッジ 90% 以上維持)
+- [x] `authenticated_client` フィクスチャ整備(既存テストの移行準備)
+- [x] `accounts` アプリ作成、カスタムユーザー(`AUTH_USER_MODEL`)
+- [x] サインアップ / ログイン / ログアウト(セッション認証)
+- [x] `Page.owner` 追加 + データマイグレーション
+- [x] `PageShare(page, user, role)` モデル(viewer / commenter / editor / full_access)
+- [x] `Page.effective_role(user)` — 祖先チェーンを N+1 なしで解決
+- [x] `@require_role` デコレータ + `PermissionError → 403`(`http.py` 拡張)
+- [x] 全 API エンドポイントへ認可チェック適用
+- [x] ページ移動・ソフトデリートと権限の整合テスト
+- [x] 共有 UI(共有モーダル・ロール選択)
+- [x] 既存テストの認証対応 + 認可テスト追加(カバレッジ 90% 以上維持)
 
 ### I. Docker・CI/CD・本番安全化
 
-- [ ] `settings` を `base / dev / prod` に分割(`django-environ`)
-- [ ] prod: `DEBUG=False`・SECRET_KEY 必須化・`SECURE_*`・`ALLOWED_HOSTS`
-- [ ] `manage.py check --deploy` 通過
-- [ ] マルチステージ Dockerfile + docker-compose(web / postgres / redis)
-- [ ] WhiteNoise による静的配信
-- [ ] `/healthz` ヘルスチェック(DB / Redis 疎通)
-- [ ] GitHub Actions: ruff → pytest(カバレッジゲート)→ Docker build
-- [ ] 構造化ログ(JSON)
-- [ ] README 更新(起動手順・バッジ)
+- [x] `settings` を `base / dev / prod` に分割(`django-environ`)
+- [x] prod: `DEBUG=False`・SECRET_KEY 必須化・`SECURE_*`・`ALLOWED_HOSTS`
+- [x] `manage.py check --deploy` 通過
+- [x] マルチステージ Dockerfile + docker-compose(web / postgres / redis)
+- [x] WhiteNoise による静的配信
+- [x] `/healthz` ヘルスチェック(DB / Redis 疎通)
+- [x] GitHub Actions: ruff → pytest(カバレッジゲート)→ Docker build
+- [x] 構造化ログ(JSON)
+- [x] README 更新(起動手順・バッジ)
 
 ## Phase 2 — 設計力・スケール基礎
 
