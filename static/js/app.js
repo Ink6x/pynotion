@@ -64,6 +64,11 @@ const App = (() => {
 
   /** @param {string} id */
   async function openPage(id) {
+    // 前のページのタイトル保存タイマーが新ページに誤発火しないよう破棄
+    if (titleSaveTimer) {
+      clearTimeout(titleSaveTimer);
+      titleSaveTimer = null;
+    }
     const data = await API.getPage(id);
     currentPage = data.page;
     localStorage.setItem(LAST_PAGE_KEY, id);
@@ -159,6 +164,7 @@ const App = (() => {
 
   /** 一時的な通知を表示する。 @param {string} message */
   function toast(message) {
+    document.querySelectorAll(".toast").forEach((el) => el.remove());
     const el = document.createElement("div");
     el.className = "toast";
     el.textContent = message;

@@ -52,7 +52,7 @@ def block_collection(request: HttpRequest, page_id: uuid.UUID) -> JsonResponse:
 @require_http_methods(["PATCH", "DELETE"])
 @json_api
 def block_detail(request: HttpRequest, block_id: uuid.UUID) -> JsonResponse:
-    block = Block.objects.filter(pk=block_id).first()
+    block = Block.objects.filter(pk=block_id, page__is_deleted=False).first()
     if block is None:
         return fail("ブロックが見つかりません", status=404)
 
@@ -80,7 +80,7 @@ def block_detail(request: HttpRequest, block_id: uuid.UUID) -> JsonResponse:
 @require_POST
 @json_api
 def block_move(request: HttpRequest, block_id: uuid.UUID) -> JsonResponse:
-    block = Block.objects.filter(pk=block_id).first()
+    block = Block.objects.filter(pk=block_id, page__is_deleted=False).first()
     if block is None:
         return fail("ブロックが見つかりません", status=404)
 

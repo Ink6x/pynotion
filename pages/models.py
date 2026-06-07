@@ -103,31 +103,48 @@ class Page(models.Model):
         return self.title or "無題"
 
     def descendants(self) -> list["Page"]:
-        """全ての子孫ページ(深さ優先)。"""
+        """全ての子孫ページ。階層ごとにまとめて取得する (クエリ数 = 深さ)。"""
         result: list[Page] = []
-        stack = list(self.children.all())
-        while stack:
-            page = stack.pop()
-            result.append(page)
-            stack.extend(page.children.all())
+        frontier = [self.pk]
+        while frontier:
+            children = list(Page.objects.filter(parent_id__in=frontier))
+            result.extend(children)
+            frontier = [child.pk for child in children]
         return result
 
     def soft_delete(self) -> None:
-        """自身と全子孫をゴミ箱へ移動する。"""
+        """自身と未削除の子孫をゴミ箱へ移動する。
+
+        既にゴミ箱にある子孫の deleted_at は上書きしない
+        (個別削除の履歴と復元単位を保つため)。
+        """
         now = timezone.now()
-        pages = [self, *self.descendants()]
+        pages = [self, *(p for p in self.descendants() if not p.is_deleted)]
         for page in pages:
             page.is_deleted = True
             page.deleted_at = now
         Page.objects.bulk_update(pages, ["is_deleted", "deleted_at"])
 
     def restore(self) -> None:
-        """自身と全子孫をゴミ箱から復元する。"""
-        pages = [self, *self.descendants()]
+        """自身と「同時に削除された」子孫をゴミ箱から復元する。
+
+        親より先に個別削除されていた子孫 (deleted_at が異なる) は
+        ゴミ箱に残す。
+        """
+        marker = self.deleted_at
+        pages = [
+            self,
+            *(p for p in self.descendants() if p.is_deleted and p.deleted_at == marker),
+        ]
         for page in pages:
             page.is_deleted = False
             page.deleted_at = None
         Page.objects.bulk_update(pages, ["is_deleted", "deleted_at"])
+
+        # 親がゴミ箱に残っている場合はルートへ付け替える
+        # (生きているのにツリーへ表示されない「孤児」を防ぐ)
+        if self.parent is not None and self.parent.is_deleted:
+            Page.objects.move(self, parent=None, after=None)
 
 
 class BlockManager(models.Manager):

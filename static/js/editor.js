@@ -386,7 +386,9 @@ const Editor = (() => {
 
     patchBlock(block.id, { text: before });
     el.textContent = before;
-    save(block.id, { text: before });
+    // 先に前半の保存を確定させてから新ブロックを作成する
+    // (順序が逆転するとリロード時に本文が重複して見えるため)
+    await save(block.id, { text: before });
     await insertBlockAfter(block, newType, after);
   }
 

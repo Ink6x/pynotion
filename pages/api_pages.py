@@ -64,6 +64,8 @@ def page_detail(request: HttpRequest, page_id: uuid.UUID) -> JsonResponse:
 
     if request.method == "PATCH":
         payload = parse_body(request)
+        if "title" not in payload and "icon" not in payload:
+            return ok({"page": serialize_page(page)})
         if "title" in payload:
             page.title = _string_field(payload, "title")
         if "icon" in payload:
@@ -98,6 +100,7 @@ def page_permanent_delete(request: HttpRequest, page_id: uuid.UUID) -> JsonRespo
 
 
 @require_GET
+@json_api
 def trash_list(request: HttpRequest) -> JsonResponse:
     pages = Page.objects.trashed().order_by("-deleted_at")
     return ok({"pages": [serialize_page(p) for p in pages]})
@@ -115,6 +118,8 @@ def page_move(request: HttpRequest, page_id: uuid.UUID) -> JsonResponse:
         parent = _resolve_optional_page(payload, "parent_id")
     else:
         parent = page.parent
+        if parent is not None and parent.is_deleted:
+            return fail("移動先の親ページがゴミ箱にあります", status=400)
 
     if parent is not None and (parent == page or parent in page.descendants()):
         return fail("ページを自身の配下に移動することはできません", status=400)
@@ -128,6 +133,7 @@ def page_move(request: HttpRequest, page_id: uuid.UUID) -> JsonResponse:
 
 
 @require_GET
+@json_api
 def search(request: HttpRequest) -> JsonResponse:
     query = request.GET.get("q", "").strip()
     if not query:

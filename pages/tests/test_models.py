@@ -52,6 +52,37 @@ class TestPage:
         assert parent.is_deleted is False
         assert child.is_deleted is False
 
+    def test_soft_delete_preserves_already_trashed_child_timestamp(self) -> None:
+        parent = Page.objects.create_page(title="親")
+        child = Page.objects.create_page(title="子", parent=parent)
+        child.soft_delete()
+        original_deleted_at = child.deleted_at
+        parent.soft_delete()
+        child.refresh_from_db()
+        assert child.deleted_at == original_deleted_at
+
+    def test_restore_keeps_independently_trashed_children(self) -> None:
+        """先に個別削除された子は、親の復元では復元されない。"""
+        parent = Page.objects.create_page(title="親")
+        child = Page.objects.create_page(title="子", parent=parent)
+        child.soft_delete()
+        parent.soft_delete()
+        parent.restore()
+        child.refresh_from_db()
+        assert parent.is_deleted is False
+        assert child.is_deleted is True
+
+    def test_restore_child_of_trashed_parent_moves_to_root(self) -> None:
+        """親がゴミ箱に残ったまま子だけ復元すると、ルートへ付け替えられる。"""
+        parent = Page.objects.create_page(title="親")
+        child = Page.objects.create_page(title="子", parent=parent)
+        parent.soft_delete()
+        child.refresh_from_db()
+        child.restore()
+        assert child.is_deleted is False
+        assert child.parent is None
+        assert child in list(Page.objects.alive().roots())
+
     def test_new_page_gets_default_paragraph_block(self) -> None:
         page = Page.objects.create_page(title="新規")
         assert page.blocks.count() == 1

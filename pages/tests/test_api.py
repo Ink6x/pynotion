@@ -183,6 +183,13 @@ class TestBlockApi:
         assert res.status_code == 200
         assert page.blocks.count() == 0
 
+    def test_block_on_trashed_page_cannot_be_edited(self, client: Client) -> None:
+        page = Page.objects.create_page(title="p")
+        block = page.blocks.first()
+        page.soft_delete()
+        res = patch_json(client, f"/api/blocks/{block.pk}/", {"text": "編集"})
+        assert res.status_code == 404
+
     def test_move_block_to_top(self, client: Client) -> None:
         page = Page.objects.create_page(title="p")
         page.blocks.all().delete()
