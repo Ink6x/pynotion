@@ -56,6 +56,21 @@ class PageManager(models.Manager.from_queryset(PageQuerySet)):
         last = siblings.last()
         return key_between(last.position if last else None, None)
 
+    def move(self, page: "Page", *, parent: "Page | None", after: "Page | None") -> None:
+        """ページを parent の子として after の直後 (None なら先頭) に移動する。"""
+        siblings = (
+            self.get_queryset().filter(parent=parent).exclude(pk=page.pk).order_by("position")
+        )
+        if after is None:
+            first = siblings.first()
+            position = key_between(None, first.position if first else None)
+        else:
+            following = siblings.filter(position__gt=after.position).first()
+            position = key_between(after.position, following.position if following else None)
+        page.parent = parent
+        page.position = position
+        page.save(update_fields=["parent", "position", "updated_at"])
+
 
 class Page(models.Model):
     """階層構造を持つページ。削除はソフトデリート(ゴミ箱)。"""
@@ -135,6 +150,20 @@ class BlockManager(models.Manager):
             return key_between(after.position, following.position if following else None)
         last = blocks.last()
         return key_between(last.position if last else None, None)
+
+    def move(self, block: "Block", *, after: "Block | None") -> None:
+        """ブロックを同一ページ内で after の直後 (None なら先頭) に移動する。"""
+        siblings = (
+            self.get_queryset().filter(page=block.page).exclude(pk=block.pk).order_by("position")
+        )
+        if after is None:
+            first = siblings.first()
+            position = key_between(None, first.position if first else None)
+        else:
+            following = siblings.filter(position__gt=after.position).first()
+            position = key_between(after.position, following.position if following else None)
+        block.position = position
+        block.save(update_fields=["position", "updated_at"])
 
 
 class Block(models.Model):
