@@ -20,13 +20,35 @@ const Editor = (() => {
   // Enter で同じタイプを引き継ぐブロック
   const INHERIT_TYPES = new Set(["to_do", "bulleted_list_item", "numbered_list_item"]);
   const TEXTLESS_TYPES = new Set(["divider"]);
+  // サーバ側 MAX_BLOCK_DEPTH と揃える (ルート = 0)。インデント幅は CSS の
+  // `.block { margin-left: calc(var(--depth) * 24px) }` 側で持つ。
+  const MAX_DEPTH = 5;
 
   /** @type {object | null} */
   let page = null;
-  /** @type {Array<object>} */
+  /**
+   * 文書順 (DFS 先行順) のフラット配列。各要素は parent_id / depth / collapsed を持つ。
+   * ネストはサーバではツリーだが、エディタ上は「インデント付きの一次元リスト」として
+   * 扱う (Notion と同じ視覚モデル)。分割・結合・矢印移動は視覚順のまま動く。
+   * @type {Array<object>}
+   */
   let blocks = [];
   /** @type {Map<string, number>} ブロック ID →保存タイマー */
   const saveTimers = new Map();
+
+  /**
+   * サーバのネストツリーを文書順フラット配列へ変換し depth を付与する。
+   * @param {Array<object>} tree @param {number} depth @returns {Array<object>}
+   */
+  function flattenTree(tree, depth = 0) {
+    const out = [];
+    for (const node of tree || []) {
+      const { children = [], ...rest } = node;
+      out.push({ ...rest, depth });
+      out.push(...flattenTree(children, depth + 1));
+    }
+    return out;
+  }
 
   function root() {
     return document.getElementById("editor");
@@ -36,10 +58,10 @@ const Editor = (() => {
      公開 API
      ---------------------------------------------------------------------- */
 
-  /** @param {object} p ページ @param {Array<object>} blockList */
-  function open(p, blockList) {
+  /** @param {object} p ページ @param {Array<object>} blockTree サーバのネストツリー */
+  function open(p, blockTree) {
     page = p;
-    blocks = blockList.slice();
+    blocks = flattenTree(blockTree);
     render();
   }
 
@@ -61,7 +83,21 @@ const Editor = (() => {
   function render() {
     const el = root();
     el.innerHTML = "";
-    blocks.forEach((block) => el.appendChild(renderBlock(block)));
+    // 折り畳まれた toggle の子孫は描画しない。collapsedAt はその toggle の depth。
+    let collapsedAt = null;
+    blocks.forEach((block) => {
+      if (collapsedAt !== null) {
+        if (block.depth > collapsedAt) return; // 折り畳み中の子孫はスキップ
+        collapsedAt = null; // 同階層以下に戻ったので折り畳み解除
+      }
+      el.appendChild(renderBlock(block));
+      if (block.type === "toggle" && block.collapsed) collapsedAt = block.depth;
+    });
+  }
+
+  /** @param {string} id 自身を根とする子孫が 1 つでもあるか */
+  function hasChildren(id) {
+    return blocks.some((b) => b.parent_id === id);
   }
 
   /** @param {object} block @returns {HTMLElement} */
@@ -70,6 +106,18 @@ const Editor = (() => {
     row.className = "block type-" + block.type;
     if (block.type === "to_do" && block.checked) row.classList.add("is-checked");
     row.dataset.blockId = block.id;
+    // ネスト深さに応じたインデント (CSS が padding-left に反映する)。
+    row.style.setProperty("--depth", String(block.depth || 0));
+
+    if (block.type === "toggle") {
+      const caret = document.createElement("button");
+      caret.type = "button";
+      caret.className = "block-toggle-caret";
+      caret.textContent = block.collapsed ? "▸" : "▾";
+      caret.title = block.collapsed ? "展開" : "折りたたむ";
+      caret.addEventListener("click", () => toggleCollapse(block.id));
+      row.appendChild(caret);
+    }
 
     const handle = document.createElement("div");
     handle.className = "block-handle";
@@ -134,6 +182,8 @@ const Editor = (() => {
         return "引用";
       case "code":
         return "コードを入力";
+      case "toggle":
+        return "トグル";
       default:
         return "入力して、コマンドは「/」を使用";
     }
@@ -294,6 +344,120 @@ const Editor = (() => {
   }
 
   /* ----------------------------------------------------------------------
+     ネスト (Tab/Shift+Tab インデント, toggle 折り畳み)
+     ---------------------------------------------------------------------- */
+
+  /** 保留中のデバウンス保存を即時に流し切る (再読み込み前に本文を確定させる)。 */
+  async function flushSaves() {
+    const ids = [...saveTimers.keys()];
+    saveTimers.forEach((t) => clearTimeout(t));
+    saveTimers.clear();
+    await Promise.all(
+      ids.map((id) => {
+        const b = blocks[blockIndex(id)];
+        return b ? save(id, { text: b.text }) : null;
+      })
+    );
+  }
+
+  /** サーバから取り直してツリーを再構築し、focusId にキャレットを戻す。 */
+  async function reload(focusId, offset) {
+    try {
+      await flushSaves(); // 未保存の本文を失わないよう先に確定
+      const data = await API.getPage(page.id);
+      blocks = flattenTree(data.blocks);
+      render();
+      if (focusId) focusBlock(focusId, offset == null ? "end" : offset);
+    } catch (err) {
+      App.toast("再読み込みに失敗しました: " + err.message);
+    }
+  }
+
+  /** 文書順フラット配列における block の部分木の高さ (葉なら 0)。 */
+  function subtreeHeight(id) {
+    const idx = blockIndex(id);
+    const base = blocks[idx].depth;
+    let max = base;
+    for (let i = idx + 1; i < blocks.length && blocks[i].depth > base; i++) {
+      if (blocks[i].depth > max) max = blocks[i].depth;
+    }
+    return max - base;
+  }
+
+  /** parentId の最後の子の id (なければ null)。 */
+  function lastChildId(parentId) {
+    let last = null;
+    blocks.forEach((b) => {
+      if (b.parent_id === parentId) last = b.id;
+    });
+    return last;
+  }
+
+  /** Tab: 直前の同階層ブロックの子にする。 @param {object} block */
+  async function indent(block) {
+    const idx = blockIndex(block.id);
+    let newParent = null;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (blocks[i].depth < block.depth) break; // 親より浅い = 兄弟は存在しない
+      if (blocks[i].depth === block.depth) {
+        newParent = blocks[i];
+        break;
+      }
+    }
+    if (!newParent) return; // 先頭の兄弟はインデントできない
+    if (newParent.depth + 1 + subtreeHeight(block.id) > MAX_DEPTH) {
+      App.toast("ネストが深すぎます");
+      return;
+    }
+    const offset = caretOffset(contentEl(block.id));
+    try {
+      await API.moveBlock(block.id, {
+        parent_id: newParent.id,
+        after_id: lastChildId(newParent.id),
+      });
+      await reload(block.id, offset);
+    } catch (err) {
+      App.toast("インデントに失敗しました: " + err.message);
+    }
+  }
+
+  /** Shift+Tab: 親の階層へ繰り上げ、旧親の直後に置く。 @param {object} block */
+  async function outdent(block) {
+    if (!block.parent_id) return; // 既にルート
+    const parentIdx = blockIndex(block.parent_id);
+    const parent = parentIdx >= 0 ? blocks[parentIdx] : null;
+    if (!parent) return; // 親が見当たらない異例ケースは何もしない
+    const grandparentId = parent.parent_id || null;
+    const offset = caretOffset(contentEl(block.id));
+    try {
+      await API.moveBlock(block.id, {
+        parent_id: grandparentId,
+        after_id: parent ? parent.id : null,
+      });
+      await reload(block.id, offset);
+    } catch (err) {
+      App.toast("アウトデントに失敗しました: " + err.message);
+    }
+  }
+
+  /** toggle の開閉。子孫の表示/非表示を切り替える。 @param {string} id */
+  async function toggleCollapse(id) {
+    const block = blocks[blockIndex(id)];
+    if (!block) return;
+    const collapsed = !block.collapsed;
+    patchBlock(id, { collapsed });
+    render();
+    try {
+      await API.updateBlock(id, { collapsed });
+    } catch (err) {
+      // 保存失敗時は楽観更新を巻き戻して UI とサーバの乖離を防ぐ
+      patchBlock(id, { collapsed: !collapsed });
+      render();
+      App.toast("保存に失敗しました: " + err.message);
+    }
+  }
+
+  /* ----------------------------------------------------------------------
      キー操作 (Enter 分割 / Backspace 結合 / 矢印移動)
      ---------------------------------------------------------------------- */
 
@@ -303,6 +467,13 @@ const Editor = (() => {
     if (window.SlashMenu && SlashMenu.handleKey(e)) return;
     const block = blocks[blockIndex(id)];
     if (!block) return;
+
+    if (e.key === "Tab") {
+      e.preventDefault();
+      if (e.shiftKey) outdent(block);
+      else indent(block);
+      return;
+    }
 
     if (e.key === "Enter") {
       if (block.type === "code" || e.shiftKey) {
@@ -423,12 +594,27 @@ const Editor = (() => {
    */
   async function insertBlockAfter(block, type, text, focus = true) {
     try {
-      const data = await API.createBlock(page.id, { type, text, after_id: block.id });
-      const created = data.block;
-      const index = blockIndex(block.id);
-      blocks = [...blocks.slice(0, index + 1), created, ...blocks.slice(index + 1)];
-      const row = root().querySelector(`[data-block-id="${block.id}"]`);
-      row.after(renderBlock(created));
+      // 新ブロックは block の兄弟 (同じ親・同じ depth)。
+      const data = await API.createBlock(page.id, {
+        type,
+        text,
+        after_id: block.id,
+        parent_id: block.parent_id || null,
+      });
+      const created = { ...data.block, depth: block.depth };
+      // block が子を持つ (展開中 toggle 等) 場合、その部分木の末尾に挿入する
+      // (文書順 = 親→子→次の兄弟 を保つ)。
+      let insertAt = blockIndex(block.id) + 1;
+      while (insertAt < blocks.length && blocks[insertAt].depth > block.depth) insertAt++;
+      const anchor = blocks[insertAt - 1]; // 直前の (描画済み) ブロック
+      blocks = [...blocks.slice(0, insertAt), created, ...blocks.slice(insertAt)];
+      const anchorRow = root().querySelector(`[data-block-id="${anchor.id}"]`);
+      if (anchorRow) {
+        anchorRow.after(renderBlock(created));
+      } else {
+        // アンカーが非表示 (折り畳み配下など) の異例ケースは全体を描き直す
+        render();
+      }
       if (focus) focusBlock(created.id, 0);
       return created;
     } catch (err) {
@@ -472,9 +658,10 @@ const Editor = (() => {
   async function appendParagraph() {
     try {
       const data = await API.createBlock(page.id, { type: "paragraph", text: "" });
-      blocks = [...blocks, data.block];
-      root().appendChild(renderBlock(data.block));
-      focusBlock(data.block.id, 0);
+      const created = { ...data.block, depth: 0 };
+      blocks = [...blocks, created];
+      root().appendChild(renderBlock(created));
+      focusBlock(created.id, 0);
     } catch (err) {
       App.toast("ブロックの作成に失敗しました: " + err.message);
     }
@@ -490,6 +677,10 @@ const Editor = (() => {
       await save(block.id, { type: "paragraph" });
       return;
     }
+
+    // 子を持つブロックの結合は子の巻き添え削除を招くため行わない
+    // (先に Shift+Tab で子を退避させる運用)。
+    if (hasChildren(block.id)) return;
 
     const index = blockIndex(block.id);
     if (index === 0) return;
@@ -580,12 +771,12 @@ const Editor = (() => {
     }
 
     try {
-      await API.moveBlock(id, { after_id: afterId });
-      const moved = blocks[index];
-      const rest = blocks.filter((b) => b.id !== id);
-      const insertAt = afterId === null ? 0 : rest.findIndex((b) => b.id === afterId) + 1;
-      blocks = [...rest.slice(0, insertAt), moved, ...rest.slice(insertAt)];
-      render();
+      // ドロップ先の兄弟階層に合わせて親を付け替える (afterId の親 = 移動先の親)。
+      const afterBlock = afterId ? blocks[blockIndex(afterId)] : null;
+      const parentId = afterBlock ? afterBlock.parent_id || null : null;
+      await API.moveBlock(id, { after_id: afterId, parent_id: parentId });
+      // ネストの depth 再計算はサーバ取得で確実に同期する。
+      await reload(id, 0);
     } catch (err) {
       App.toast("並べ替えに失敗しました: " + err.message);
     }

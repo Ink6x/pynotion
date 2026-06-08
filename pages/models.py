@@ -45,6 +45,11 @@ class BlockType(models.TextChoices):
     QUOTE = "quote", "引用"
     DIVIDER = "divider", "区切り線"
     CODE = "code", "コード"
+    TOGGLE = "toggle", "トグル"
+
+
+# ブロックのネスト最大深さ (ルート直下を 0 とする)。循環・無限ネストを防ぐ。
+MAX_BLOCK_DEPTH = 5
 
 
 class PageQuerySet(models.QuerySet):
@@ -295,23 +300,49 @@ class BlockManager(models.Manager):
         type: str,
         text: str = "",
         checked: bool = False,
+        parent: "Block | None" = None,
         after: "Block | None" = None,
     ) -> "Block":
-        position = self._next_position(page=page, after=after)
-        return self.create(page=page, type=type, text=text, checked=checked, position=position)
+        if parent is not None:
+            _validate_block_parent(page=page, parent=parent)
+        _validate_after_sibling(after=after, parent=parent)
+        position = self._next_position(page=page, parent=parent, after=after)
+        return self.create(
+            page=page,
+            type=type,
+            text=text,
+            checked=checked,
+            parent=parent,
+            position=position,
+        )
 
-    def _next_position(self, *, page: Page, after: "Block | None") -> str:
-        blocks = self.get_queryset().filter(page=page).order_by("position")
+    def _next_position(
+        self, *, page: Page, parent: "Block | None", after: "Block | None"
+    ) -> str:
+        # 並び順は (page, parent) 単位。兄弟だけを対象に midpoint を取る。
+        blocks = self.get_queryset().filter(page=page, parent=parent).order_by("position")
         if after is not None:
             following = blocks.filter(position__gt=after.position).first()
             return key_between(after.position, following.position if following else None)
         last = blocks.last()
         return key_between(last.position if last else None, None)
 
-    def move(self, block: "Block", *, after: "Block | None") -> None:
-        """ブロックを同一ページ内で after の直後 (None なら先頭) に移動する。"""
+    def move(
+        self, block: "Block", *, parent: "Block | None", after: "Block | None"
+    ) -> None:
+        """ブロックを parent の子として after の直後 (None なら先頭) に移動する。
+
+        parent=None ならルート (ページ直下) へ。循環・深さ・ページ跨ぎは
+        ``_validate_block_parent`` で防ぐ。
+        """
+        if parent is not None:
+            _validate_block_parent(page=block.page, parent=parent, moving=block)
+        _validate_after_sibling(after=after, parent=parent)
         siblings = (
-            self.get_queryset().filter(page=block.page).exclude(pk=block.pk).order_by("position")
+            self.get_queryset()
+            .filter(page=block.page, parent=parent)
+            .exclude(pk=block.pk)
+            .order_by("position")
         )
         if after is None:
             first = siblings.first()
@@ -319,8 +350,42 @@ class BlockManager(models.Manager):
         else:
             following = siblings.filter(position__gt=after.position).first()
             position = key_between(after.position, following.position if following else None)
+        block.parent = parent
         block.position = position
-        block.save(update_fields=["position", "updated_at"])
+        block.save(update_fields=["parent", "position", "updated_at"])
+
+
+def _validate_after_sibling(*, after: "Block | None", parent: "Block | None") -> None:
+    """after が移動先 (parent) の兄弟であることを保証する。
+
+    position は (page, parent) スコープで採番するため、別の親に属する after を
+    基準にすると整合しない順序キーが生成されてしまう。境界で弾く。
+    """
+    if after is None:
+        return
+    parent_pk = parent.pk if parent is not None else None
+    if after.parent_id != parent_pk:
+        raise ValueError("after は移動先と同じ親のブロックを指定してください")
+
+
+def _validate_block_parent(
+    *, page: Page, parent: "Block", moving: "Block | None" = None
+) -> None:
+    """ブロックを parent の子にしてよいか検証する (不正なら ValueError)。
+
+    - 親は同じページに属していること (ページ跨ぎ禁止)
+    - 自身・自身の子孫を親にしないこと (循環禁止)
+    - ネスト深さが MAX_BLOCK_DEPTH を超えないこと
+      (親の深さ + 1 + 移動するサブツリーの高さ)
+    """
+    if parent.page_id != page.pk:
+        raise ValueError("別のページのブロックを親にはできません")
+    if moving is not None:
+        if parent.pk == moving.pk or parent.pk in moving.descendant_ids():
+            raise ValueError("ブロックを自身の配下に移動することはできません")
+    subtree_height = moving.subtree_height() if moving is not None else 0
+    if parent.depth() + 1 + subtree_height > MAX_BLOCK_DEPTH:
+        raise ValueError("ネストが深すぎます")
 
 
 class Block(models.Model):
@@ -328,6 +393,13 @@ class Block(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     page = models.ForeignKey(Page, on_delete=models.CASCADE, related_name="blocks")
+    parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="children",
+    )
     type = models.CharField(
         max_length=32,
         choices=BlockType.choices,
@@ -335,6 +407,7 @@ class Block(models.Model):
     )
     text = models.TextField(blank=True, default="")
     checked = models.BooleanField(default=False)
+    collapsed = models.BooleanField(default=False)
     position = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -344,8 +417,47 @@ class Block(models.Model):
     class Meta:
         ordering = ["position"]
         indexes = [
-            models.Index(fields=["page", "position"]),
+            models.Index(fields=["page", "parent", "position"]),
         ]
 
     def __str__(self) -> str:
         return f"{self.get_type_display()}: {self.text[:30]}"
+
+    def depth(self) -> int:
+        """ルート (ページ直下 = 0) からのネスト深さ。クエリ数 = 深さ。"""
+        depth = 0
+        seen = {self.pk}
+        current = self.parent_id
+        while current is not None and current not in seen:
+            depth += 1
+            seen.add(current)
+            current = (
+                Block.objects.filter(pk=current).values_list("parent_id", flat=True).first()
+            )
+        return depth
+
+    def descendant_ids(self) -> set[uuid.UUID]:
+        """全ての子孫ブロック id の集合。階層ごとにまとめて取得 (クエリ数 = 深さ)。"""
+        ids: set[uuid.UUID] = set()
+        frontier = [self.pk]
+        while frontier:
+            children = list(
+                Block.objects.filter(parent_id__in=frontier).values_list("pk", flat=True)
+            )
+            children = [c for c in children if c not in ids]
+            ids.update(children)
+            frontier = children
+        return ids
+
+    def subtree_height(self) -> int:
+        """自身を根とする部分木の高さ (葉のみなら 0)。"""
+        height = 0
+        frontier = [self.pk]
+        while True:
+            children = list(
+                Block.objects.filter(parent_id__in=frontier).values_list("pk", flat=True)
+            )
+            if not children:
+                return height
+            height += 1
+            frontier = children

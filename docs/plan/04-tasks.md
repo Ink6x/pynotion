@@ -70,11 +70,12 @@
 
 ### E. ブロックのネスト
 
-- [ ] `Block.parent` 自己参照 FK + マイグレーション
-- [ ] `serialize_block` のツリー化
-- [ ] Tab / Shift+Tab インデント(`editor.js`)
-- [ ] toggle ブロック(開閉状態)
-- [ ] 深さ制限・循環防止 + 階層を跨ぐ Enter 分割 / Backspace 結合
+- [x] `Block.parent` 自己参照 FK + マイグレーション(position を (page, parent) スコープ化)
+- [x] `serialize_block` のツリー化(`serialize_block_tree`、ツリー取得は N+1 なし)
+- [x] Tab / Shift+Tab インデント(`editor.js`、フラット配列 + depth モデル)
+- [x] toggle ブロック(`collapsed` 開閉状態、子孫の表示制御)
+- [x] 深さ制限(`MAX_BLOCK_DEPTH=5`)・循環防止・ページ跨ぎ防止 + 階層を跨ぐ
+      Enter 分割(親を継承)/ Backspace 結合(子を持つブロックは巻き添え防止)
 
 ### C-3a. リアルタイム同期(ブロック粒度)
 
