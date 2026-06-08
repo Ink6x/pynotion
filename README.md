@@ -88,6 +88,7 @@ pages/
   permissions.py  ロール検査ヘルパー (認可の一元化)
   ordering.py     並び順キー生成 (rocicorp/fractional-indexing の midpoint 移植)
   search.py       全文検索 (PostgreSQL=pg_trgm+SearchVector / SQLite=icontains)
+  cache.py        ページツリーの Redis キャッシュ (世代カウンタで無効化)
   api.py          django-ninja API (/api/ 全体、OpenAPI 自動生成、レート制限)
   schemas.py      pydantic リクエストスキーマ (書き込み系の型付け)
   http.py         {ok, data, error} レスポンス封筒 + 401/403/404/429 変換
@@ -134,9 +135,34 @@ docker-compose.yml  web / postgres / redis
 pytest --cov=pages --cov=config --cov=accounts --cov-report=term-missing
 ```
 
-123 件 / カバレッジ 96%(CI は SQLite で 90% ゲート、別途 PostgreSQL ジョブで
+126 件 / カバレッジ 96%(CI は SQLite で 90% ゲート、別途 PostgreSQL ジョブで
 全文検索パスを実 DB 検証)。SQLite→PostgreSQL のデータ移行手順は
 [docs/postgres-migration.md](./docs/postgres-migration.md) を参照。
+
+## パフォーマンス
+
+- **ページツリーの Redis キャッシュ**: ツリー取得をユーザー単位でキャッシュし、
+  ページの作成/改名/移動/削除/共有変更で**世代カウンタ**を進めて一括無効化する
+  (ブロック本文の編集では無効化しないため編集中もヒットし続ける)。
+
+  | ツリー取得 (50 ページ) | レイテンシ | DB クエリ数 |
+  |---|---|---|
+  | キャッシュミス | 3.4 ms | 5 (うちツリー構築 3) |
+  | キャッシュヒット | 1.1 ms | 2 (認証のみ、ツリー構築 0) |
+
+  *ローカル SQLite・テストクライアントでの計測。ツリー構築用の DB クエリが 3→0、
+  レイテンシ約 3 倍改善。本番 (PostgreSQL + Redis) では DB 往復削減の効果がより大きい。*
+
+- **N+1 の回帰防止**: ページ詳細取得のクエリ数がブロック数に依存しないことを
+  テストで固定 (1 件でも 40 件でも同数 = N+1 なし)。
+- **クエリ計測**: `DEBUG_TOOLBAR=1 python manage.py runserver` で
+  django-debug-toolbar を有効化。
+- **負荷試験**: [locustfile.py](./locustfile.py) にセッション認証込みのシナリオ。
+  ```bash
+  LOCUST_USER=alice LOCUST_PASS=secret \
+    locust -f locustfile.py --host http://127.0.0.1:8000 \
+           --users 50 --spawn-rate 10 --run-time 1m --headless
+  ```
 
 ## ライセンス
 

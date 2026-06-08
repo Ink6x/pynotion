@@ -25,6 +25,7 @@ from ninja.errors import AuthenticationError, HttpError, ValidationError
 from ninja.renderers import BaseRenderer
 from ninja.security import django_auth
 
+from .cache import get_cached_tree, invalidate_trees, set_cached_tree
 from .http import fail, ok
 from .models import Block, BlockType, Page, PageShare, Role, accessible_page_ids
 from .permissions import NOT_FOUND_MESSAGE, check_page_role
@@ -184,9 +185,14 @@ def _get_editable_block(block_id: uuid.UUID, user) -> Block:
 
 @api.get("/pages/")
 def list_pages(request):
+    cached = get_cached_tree(request.user)
+    if cached is not None:
+        return {"pages": cached}
     ids = accessible_page_ids(request.user)
     pages = Page.objects.alive().filter(pk__in=ids).order_by("position")
-    return {"pages": serialize_tree(pages)}
+    tree = serialize_tree(pages)
+    set_cached_tree(request.user, tree)
+    return {"pages": tree}
 
 
 @api.post("/pages/")
@@ -200,6 +206,7 @@ def create_page(request, payload: PageCreateIn):
     page = Page.objects.create_page(
         owner=owner, title=payload.title, icon=payload.icon, parent=parent, after=after
     )
+    invalidate_trees()
     # 201 はステータス込みの封筒を直接返す (ninja は HttpResponse をそのまま通す)。
     return ok({"page": serialize_page(page)}, status=201)
 
@@ -228,6 +235,7 @@ def update_page(request, page_id: uuid.UUID, payload: PageUpdateIn):
         page.icon = payload.icon or ""
     if fields & {"title", "icon"}:
         page.save(update_fields=["title", "icon", "updated_at"])
+        invalidate_trees()
     return {"page": serialize_page(page)}
 
 
@@ -236,6 +244,7 @@ def delete_page(request, page_id: uuid.UUID):
     _enforce_write_ratelimit(request)
     page = _get_page(page_id, request.user, Role.EDITOR)
     page.soft_delete()
+    invalidate_trees()
     return {"page": serialize_page(page)}
 
 
@@ -244,6 +253,7 @@ def restore_page(request, page_id: uuid.UUID):
     _enforce_write_ratelimit(request)
     page = _get_page(page_id, request.user, Role.EDITOR, queryset="trashed")
     page.restore()
+    invalidate_trees()
     return {"page": serialize_page(page)}
 
 
@@ -254,6 +264,7 @@ def permanent_delete_page(request, page_id: uuid.UUID):
     if not page.is_deleted:
         raise ValueError("ゴミ箱にあるページのみ完全削除できます")
     page.delete()
+    invalidate_trees()
     return {"deleted": True}
 
 
@@ -278,6 +289,7 @@ def move_page(request, page_id: uuid.UUID, payload: PageMoveIn):
         raise ValueError("after_id は移動先と同じ階層のページを指定してください")
 
     Page.objects.move(page, parent=parent, after=after)
+    invalidate_trees()
     return {"page": serialize_page(page)}
 
 
@@ -372,6 +384,7 @@ def create_share(request, page_id: uuid.UUID, payload: ShareCreateIn):
     share, created = PageShare.objects.update_or_create(
         page=page, user=target, defaults={"role": payload.role}
     )
+    invalidate_trees()  # 共有先ユーザーのツリーが変わる
     return ok({"share": serialize_share(share)}, status=201 if created else 200)
 
 
@@ -383,4 +396,5 @@ def delete_share(request, page_id: uuid.UUID, user_id: int):
     if share is None:
         raise LookupError("共有が見つかりません")
     share.delete()
+    invalidate_trees()  # 共有先ユーザーのツリーが変わる
     return {"deleted": True}
