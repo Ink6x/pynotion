@@ -66,6 +66,12 @@ const API = (() => {
     upsertShare: (pageId, payload) => request("POST", `/api/pages/${pageId}/shares/`, payload),
     removeShare: (pageId, userId) =>
       request("DELETE", `/api/pages/${pageId}/shares/${userId}/`),
+    // バージョン履歴
+    listSnapshots: (pageId) => request("GET", `/api/pages/${pageId}/snapshots/`),
+    getSnapshot: (pageId, snapshotId) =>
+      request("GET", `/api/pages/${pageId}/snapshots/${snapshotId}/`),
+    restoreSnapshot: (pageId, snapshotId) =>
+      request("POST", `/api/pages/${pageId}/snapshots/${snapshotId}/restore/`, {}),
     // ブロック
     createBlock: (pageId, payload) => request("POST", `/api/pages/${pageId}/blocks/`, payload),
     updateBlock: (id, payload) => request("PATCH", `/api/blocks/${id}/`, payload),

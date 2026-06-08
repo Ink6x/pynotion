@@ -26,9 +26,10 @@ from ninja.errors import AuthenticationError, HttpError, ValidationError
 from ninja.renderers import BaseRenderer
 from ninja.security import django_auth
 
+from . import history
 from .cache import get_cached_tree, invalidate_trees, set_cached_tree
 from .http import ConflictError, fail, ok
-from .models import Block, BlockType, Page, PageShare, Role, accessible_page_ids
+from .models import Block, BlockType, Page, PageShare, PageSnapshot, Role, accessible_page_ids
 from .permissions import NOT_FOUND_MESSAGE, check_page_role
 from .realtime import broadcast_block_event
 from .schemas import (
@@ -46,6 +47,7 @@ from .serializers import (
     serialize_block_tree,
     serialize_page,
     serialize_share,
+    serialize_snapshot,
     serialize_tree,
 )
 
@@ -352,6 +354,7 @@ def search(request, q: str = ""):
 def create_block(request, page_id: uuid.UUID, payload: BlockCreateIn):
     _enforce_write_ratelimit(request)
     page = _get_page(page_id, request.user, Role.EDITOR)
+    history.maybe_capture(page, request.user)  # 編集セッション境界で履歴を残す
     block = Block.objects.create_block(
         page=page,
         type=_validate_block_type(payload.type),
@@ -372,6 +375,9 @@ def update_block(request, block_id: uuid.UUID, payload: BlockUpdateIn):
     # 楽観ロック: version が送られていて現在値と異なれば競合 (409)。
     if "version" in fields and payload.version is not None and payload.version != block.version:
         raise ConflictError("ブロックが他の編集で更新されています。最新を取得してください")
+    # 本文系の変更時のみ履歴を残す (collapsed のような表示状態は対象外)
+    if fields & {"type", "text", "checked"}:
+        history.maybe_capture(block.page, request.user)
     update_fields = ["updated_at"]
     content_changed = False
     if "type" in fields:
@@ -402,6 +408,7 @@ def update_block(request, block_id: uuid.UUID, payload: BlockUpdateIn):
 def delete_block(request, block_id: uuid.UUID):
     _enforce_write_ratelimit(request)
     block = _get_editable_block(block_id, request.user)
+    history.maybe_capture(block.page, request.user)
     page_id = block.page_id
     block.delete()
     _broadcast(request, page_id, "deleted", {"id": str(block_id)})
@@ -412,6 +419,7 @@ def delete_block(request, block_id: uuid.UUID):
 def move_block(request, block_id: uuid.UUID, payload: BlockMoveIn):
     _enforce_write_ratelimit(request)
     block = _get_editable_block(block_id, request.user)
+    history.maybe_capture(block.page, request.user)
     if "parent_id" in payload.model_fields_set:
         parent = _resolve_parent_block(payload.parent_id, block.page)
     else:
@@ -420,6 +428,50 @@ def move_block(request, block_id: uuid.UUID, payload: BlockMoveIn):
     Block.objects.move(block, parent=parent, after=after)
     _broadcast(request, block.page_id, "moved", {"block": serialize_block(block)})
     return {"block": serialize_block(block)}
+
+
+# --- バージョン履歴 ---------------------------------------------------------
+
+
+def _get_snapshot(page: Page, snapshot_id: uuid.UUID) -> PageSnapshot:
+    snapshot = page.snapshots.filter(pk=snapshot_id).first()
+    if snapshot is None:
+        raise LookupError("スナップショットが見つかりません")
+    return snapshot
+
+
+@api.get("/pages/{uuid:page_id}/snapshots/")
+def list_snapshots(request, page_id: uuid.UUID):
+    page = _get_page(page_id, request.user, Role.VIEWER)
+    snapshots = page.snapshots.select_related("created_by").all()
+    return {"snapshots": [serialize_snapshot(s) for s in snapshots]}
+
+
+@api.get("/pages/{uuid:page_id}/snapshots/{uuid:snapshot_id}/")
+def snapshot_detail(request, page_id: uuid.UUID, snapshot_id: uuid.UUID):
+    page = _get_page(page_id, request.user, Role.VIEWER)
+    snapshot = _get_snapshot(page, snapshot_id)
+    # 「今このスナップショットへ復元したら何が変わるか」を現在状態との差分で示す
+    current = serialize_block_tree(page.blocks.order_by("position"))
+    return {
+        "snapshot": serialize_snapshot(snapshot, include_data=True),
+        "diff": history.diff_trees(current, snapshot.data),
+    }
+
+
+@api.post("/pages/{uuid:page_id}/snapshots/{uuid:snapshot_id}/restore/")
+def restore_snapshot(request, page_id: uuid.UUID, snapshot_id: uuid.UUID):
+    _enforce_write_ratelimit(request)
+    page = _get_page(page_id, request.user, Role.EDITOR)
+    snapshot = _get_snapshot(page, snapshot_id)
+    history.restore(page, snapshot, request.user)
+    # 復元で内容が入れ替わったことを「最終更新」に反映し、ツリーキャッシュも更新する
+    page.save(update_fields=["updated_at"])
+    invalidate_trees()
+    # 全ブロックが入れ替わるため購読者には再取得を促す
+    _broadcast(request, page.id, "restored", {"page_id": str(page.id)})
+    blocks = serialize_block_tree(page.blocks.order_by("position"))
+    return {"page": serialize_page(page), "blocks": blocks}
 
 
 # --- 共有 -------------------------------------------------------------------

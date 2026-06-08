@@ -464,3 +464,33 @@ class Block(models.Model):
                 return height
             height += 1
             frontier = children
+
+
+class PageSnapshot(models.Model):
+    """ページのある時点のブロックツリーのスナップショット (バージョン履歴)。
+
+    ``data`` は ``serialize_block_tree`` 形式のネスト JSON。編集セッション境界で
+    保存し (``history.maybe_capture``)、差分表示・復元に使う。保持件数は
+    ``history.RETENTION`` で制限する。
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    page = models.ForeignKey(Page, on_delete=models.CASCADE, related_name="snapshots")
+    data = models.JSONField(default=list)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="page_snapshots",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["page", "-created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.page} @ {self.created_at:%Y-%m-%d %H:%M}"

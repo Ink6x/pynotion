@@ -124,6 +124,33 @@ def test_toggle_collapse_hides_children(app):
     expect(app.locator("#editor .block", has_text="中身")).to_have_count(1)
 
 
+def test_version_history_restore(app):
+    """編集で履歴が残り、履歴モーダルから編集前の状態へ復元できる。
+
+    スナップショットは「編集セッションの境界」= 最初の編集の直前に撮られるため、
+    高速な 1 セッションでは編集前(空)の状態が 1 件残る。復元するとその状態へ戻る。
+    """
+    block = create_page_with_first_block(app)
+    block.click()
+    app.keyboard.type("あとで消える内容")
+    # デバウンス保存とスナップショット作成を待つ
+    app.wait_for_timeout(600)
+    expect(app.locator("#editor .block-content").first).to_have_text("あとで消える内容")
+
+    # confirm を自動承認しておく
+    app.on("dialog", lambda d: d.accept())
+
+    # 履歴を開く (最初の編集の直前=空の状態が 1 件残っている)
+    app.locator("#history-button").click()
+    modal = app.locator(".modal")
+    expect(modal).to_be_visible()
+    expect(app.locator(".history-row").first).to_be_visible()
+
+    # 復元 → 編集前(空)の状態に戻る
+    app.locator(".history-row .trash-action").first.click()
+    expect(app.locator("#editor .block-content").first).to_have_text("")
+
+
 def test_search_then_trash_and_restore(app):
     """検索でページを開き、ゴミ箱へ移動して復元する。"""
     create_page_with_first_block(app)
