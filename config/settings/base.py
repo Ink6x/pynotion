@@ -99,3 +99,14 @@ REDIS_URL = env("REDIS_URL", default=None)
 # 書き込み系 API のレート制限 (django-ratelimit、ユーザー単位)。
 # 実行時参照のためテストでは override_settings で差し替えられる。
 WRITE_RATELIMIT = env("WRITE_RATELIMIT", default="120/m")
+
+# キャッシュ (ページツリー / レート制限カウンタ)。
+# 既定はプロセス内 LocMemCache。prod は REDIS_URL があれば Redis に差し替える。
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+    }
+}
+
+# ページツリーキャッシュの TTL (秒)。世代カウンタで明示無効化もする。
+PAGE_TREE_CACHE_TTL = env.int("PAGE_TREE_CACHE_TTL", default=300)

@@ -8,13 +8,23 @@
 `manage.py check --deploy` をエラー 0 で通過することを CI で保証する。
 """
 from .base import *  # noqa: F403
-from .base import INSTALLED_APPS, env, with_postgres_app
+from .base import INSTALLED_APPS, REDIS_URL, env, with_postgres_app
 
 DEBUG = False
 
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
 DATABASES = {"default": env.db("DATABASE_URL")}
+
+# Redis があればキャッシュ (ページツリー / レート制限) を Redis に載せる。
+# 複数ワーカー間でカウンタ・キャッシュを共有するため本番では Redis が望ましい。
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
+    }
 
 # 本番は通常 PostgreSQL。ただし CI の deploy-check は SQLite を渡すため、
 # エンジンを見て条件付きで有効化する (psycopg 不在環境での import 失敗を防ぐ)。

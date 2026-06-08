@@ -59,10 +59,10 @@
 
 ### J. パフォーマンス
 
-- [ ] django-debug-toolbar 導入(dev)
-- [ ] N+1 排除(`select_related` / `prefetch_related`、権限解決)
-- [ ] ページツリーの Redis キャッシュ + 無効化
-- [ ] locust 負荷試験、before/after を README に掲載
+- [x] django-debug-toolbar 導入(dev、`DEBUG_TOOLBAR=1` で有効化)
+- [x] N+1 排除 + クエリ数回帰テスト(`django_assert_num_queries` 相当の比較で固定)
+- [x] ページツリーの Redis キャッシュ + 世代カウンタによる無効化
+- [x] locust 負荷試験シナリオ(`locustfile.py`)+ キャッシュ before/after を README に掲載
 
 ## Phase 3 — 難問を解いた証明
 

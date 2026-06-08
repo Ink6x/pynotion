@@ -14,6 +14,7 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 
@@ -25,3 +26,7 @@ urlpatterns = [
     path('healthz', views.healthz),
     path('', include('pages.urls')),
 ]
+
+# django-debug-toolbar (dev で DEBUG_TOOLBAR=1 のときのみ)
+if settings.DEBUG and getattr(settings, "ENABLE_DEBUG_TOOLBAR", False):
+    urlpatterns = [path("__debug__/", include("debug_toolbar.urls")), *urlpatterns]

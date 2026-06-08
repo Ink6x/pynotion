@@ -2,7 +2,7 @@
 import environ
 
 from .base import *  # noqa: F403
-from .base import BASE_DIR, INSTALLED_APPS, env, with_postgres_app
+from .base import BASE_DIR, INSTALLED_APPS, MIDDLEWARE, env, with_postgres_app
 
 # リポジトリ直下の .env を読む(存在しなければ無視。os.environ は上書きしない)
 environ.Env.read_env(BASE_DIR / ".env", overwrite=False)
@@ -32,3 +32,12 @@ else:
     }
 
 INSTALLED_APPS = with_postgres_app(INSTALLED_APPS, DATABASES)
+
+# django-debug-toolbar (クエリ計測・N+1 発見)。
+# テスト実行時のクエリ数計測やレスポンスへの干渉を避けるため、既定では無効。
+# `DEBUG_TOOLBAR=1 python manage.py runserver` で有効化する。
+ENABLE_DEBUG_TOOLBAR = env.bool("DEBUG_TOOLBAR", default=False)
+if ENABLE_DEBUG_TOOLBAR:
+    INSTALLED_APPS = [*INSTALLED_APPS, "debug_toolbar"]
+    MIDDLEWARE = ["debug_toolbar.middleware.DebugToolbarMiddleware", *MIDDLEWARE]
+    INTERNAL_IPS = ["127.0.0.1"]
