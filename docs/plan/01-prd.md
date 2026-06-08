@@ -62,14 +62,14 @@ Django 製 Notion クローン「pynotion」を、フリーランス市場で
 
 ## 4. 成功基準
 
-### Phase 1〜2 完了時(5,500〜6,000 円帯)
+### Phase 1〜2 完了時(5,500〜6,000 円帯) — ✅ 達成
 
-- [ ] 認証 + ページ共有/権限(RBAC)があり、他人に使わせられる
-- [ ] PostgreSQL で動作し、日本語全文検索が実用レベル
-- [ ] Docker 一発で起動、GitHub Actions で lint + test + coverage ゲートが回る
-- [ ] OpenAPI ドキュメントが自動生成される
-- [ ] Playwright E2E が主要フローをカバーし CI に組み込まれている
-- [ ] `manage.py check --deploy` が通る本番設定
+- [x] 認証 + ページ共有/権限(RBAC)があり、他人に使わせられる
+- [x] PostgreSQL で動作し、日本語全文検索が実用レベル(pg_trgm + SearchVector)
+- [x] Docker 一発で起動、GitHub Actions で lint + test + coverage ゲートが回る
+- [x] OpenAPI ドキュメントが自動生成される(django-ninja、`/api/docs`)
+- [x] Playwright E2E が主要フローをカバーし CI に組み込まれている
+- [x] `manage.py check --deploy` が通る本番設定
 
 ### Phase 3〜4 完了時(8,000 円帯)
 
