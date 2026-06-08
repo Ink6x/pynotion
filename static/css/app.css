@@ -405,3 +405,34 @@ kbd {
   width: 130px;
   flex-shrink: 0;
 }
+
+/* バージョン履歴 */
+.history-list {
+  padding: var(--space-s) var(--space-m);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.history-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-s);
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.history-row:last-child {
+  border-bottom: none;
+}
+
+.history-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.history-when {
+  font-variant-numeric: tabular-nums;
+}

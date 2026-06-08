@@ -55,6 +55,7 @@ http://localhost:8000 で利用できる。死活監視は `GET /healthz`
 | ブロックエディタ | 段落 / 見出し1-3 / ToDo / 箇条書き / 番号付き / 引用 / 区切り線 / コード / トグル |
 | ブロックのネスト | `Tab` / `Shift+Tab` でインデント、トグルの開閉。最大 5 階層、循環・ページ跨ぎを防止 |
 | リアルタイム同期 | 同じページを開いている他ユーザーへブロック変更を WebSocket で即時反映(Channels)。`Block.version` の楽観ロックで競合を 409 検出。プレゼンス表示(誰が閲覧中か) |
+| バージョン履歴 | 編集セッション境界でブロックツリーを自動スナップショット。`🕘 履歴` から一覧・復元(ネスト保持)。保持件数を制限してストレージ肥大を防止 |
 | スラッシュコマンド | `/` でブロックタイプメニュー(インクリメンタル絞り込み) |
 | Markdown 風入力 | `# ` `## ` `- ` `1. ` `[] ` `> ` ` ``` ` `---` で自動変換 |
 | ブロック操作 | Enter で分割、行頭 Backspace で結合、⠿ ハンドルのドラッグ並べ替え |
@@ -101,6 +102,7 @@ pages/
   consumers.py    WebSocket Consumer (購読・ブロードキャスト転送・プレゼンス)
   routing.py      WebSocket ルーティング (ws/pages/<id>/)
   realtime.py     REST 書き込み後のブロードキャストヘルパー (group_send)
+  history.py      バージョン履歴 (スナップショット取得・diff・復元・保持)
 static/
   css/tokens.css  DESIGN.md のデザイントークン (CSS Custom Properties)
   css/*.css       アプリシェル / サイドバー / エディタ / 認証画面
@@ -140,6 +142,11 @@ locustfile.py     locust 負荷試験シナリオ
   受信専用。`Block.version` の楽観ロックで競合を 409 検出。`X-Client-Id` で自己
   エコーを除去し、同位置同時挿入は fractional indexing のキーで構造的に解決する。
   チャネルレイヤは dev/テストがインメモリ、本番は Redis(複数ワーカー間配信)
+- **バージョン履歴**: `PageSnapshot` にブロックツリーの JSON を保存。編集のたびに
+  撮ると肥大化するため「直近スナップショットから一定時間空いていれば撮る」時間
+  スロットリングで編集セッション境界を捉える。復元はトランザクション内で現ブロック
+  を全削除し、ツリーを再構築(ネスト・id を保持)。復元自体も元に戻せるよう直前の
+  状態も履歴へ残す。ページごと最新 N 件のみ保持
 - **ゴミ箱**: `is_deleted` + `deleted_at` のソフトデリート。子孫へカスケードし、
   復元は「同時に削除されたもの」だけを対象にする
 - **API**: django-ninja で `/api/` を提供。全レスポンスを `{ok, data, error}`
@@ -162,7 +169,7 @@ locustfile.py     locust 負荷試験シナリオ
 pytest --cov=pages --cov=config --cov=accounts --cov-report=term-missing
 ```
 
-158 件 / カバレッジ 96%(CI は SQLite で 90% ゲート、別途 PostgreSQL ジョブで
+172 件 / カバレッジ 96%(CI は SQLite で 90% ゲート、別途 PostgreSQL ジョブで
 全文検索パスを実 DB 検証)。SQLite→PostgreSQL のデータ移行手順は
 [docs/postgres-migration.md](./docs/postgres-migration.md) を参照。
 

@@ -2,7 +2,7 @@
 from collections import defaultdict
 from collections.abc import Iterable
 
-from .models import Block, Page, PageShare
+from .models import Block, Page, PageShare, PageSnapshot
 
 
 def serialize_share(share: PageShare) -> dict:
@@ -22,6 +22,26 @@ def serialize_page(page: Page) -> dict:
         "position": page.position,
         "updated_at": page.updated_at.isoformat(),
     }
+
+
+def _count_blocks(tree: Iterable[dict]) -> int:
+    """ネスト JSON 内のブロック総数。"""
+    total = 0
+    for node in tree or []:
+        total += 1 + _count_blocks(node.get("children", []))
+    return total
+
+
+def serialize_snapshot(snapshot: PageSnapshot, *, include_data: bool = False) -> dict:
+    data = {
+        "id": str(snapshot.id),
+        "created_at": snapshot.created_at.isoformat(),
+        "created_by": snapshot.created_by.username if snapshot.created_by else None,
+        "block_count": _count_blocks(snapshot.data),
+    }
+    if include_data:
+        data["data"] = snapshot.data
+    return data
 
 
 def serialize_block(block: Block) -> dict:

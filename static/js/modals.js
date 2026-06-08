@@ -341,6 +341,100 @@ const Modals = (() => {
   }
 
   /* ----------------------------------------------------------------------
+     バージョン履歴モーダル
+     ---------------------------------------------------------------------- */
+  async function openHistory() {
+    const pageId = App.currentPageId();
+    if (!pageId) return;
+
+    const modal = document.createElement("div");
+    modal.className = "modal";
+
+    const header = document.createElement("div");
+    header.className = "trash-header";
+    header.textContent = "🕘 バージョン履歴";
+
+    const list = document.createElement("div");
+    list.className = "history-list";
+
+    modal.append(header, list);
+    showModal(modal);
+
+    await renderSnapshots(pageId, list);
+  }
+
+  /** @param {string} pageId @param {HTMLElement} list */
+  async function renderSnapshots(pageId, list) {
+    try {
+      const data = await API.listSnapshots(pageId);
+      list.innerHTML = "";
+      if (data.snapshots.length === 0) {
+        list.innerHTML =
+          '<div class="search-hint text-small text-secondary">まだ履歴がありません。編集すると自動で保存されます。</div>';
+        return;
+      }
+      data.snapshots.forEach((snap) =>
+        list.appendChild(renderSnapshotRow(pageId, snap, list))
+      );
+    } catch (err) {
+      closeModal();
+      App.toast("履歴の取得に失敗しました: " + err.message);
+    }
+  }
+
+  /** @param {string} pageId @param {object} snap @param {HTMLElement} list */
+  function renderSnapshotRow(pageId, snap, list) {
+    const row = document.createElement("div");
+    row.className = "history-row";
+
+    const meta = document.createElement("div");
+    meta.className = "history-meta";
+    const when = document.createElement("span");
+    when.className = "history-when";
+    when.textContent = formatDateTime(snap.created_at);
+    const sub = document.createElement("span");
+    sub.className = "history-sub text-small text-secondary";
+    const by = snap.created_by ? ` · ${snap.created_by}` : "";
+    sub.textContent = `${snap.block_count} ブロック${by}`;
+    meta.append(when, sub);
+
+    const restore = document.createElement("button");
+    restore.type = "button";
+    restore.className = "btn btn-ghost trash-action";
+    restore.textContent = "復元";
+    restore.addEventListener("click", () => restoreSnapshot(pageId, snap.id));
+
+    row.append(meta, restore);
+    return row;
+  }
+
+  /** @param {string} pageId @param {string} snapshotId */
+  async function restoreSnapshot(pageId, snapshotId) {
+    if (!window.confirm("このバージョンに復元しますか?(現在の状態も履歴に残ります)")) {
+      return;
+    }
+    try {
+      await API.restoreSnapshot(pageId, snapshotId);
+      closeModal();
+      await App.openPage(pageId); // 再構築されたブロックを反映
+      App.toast("復元しました");
+    } catch (err) {
+      App.toast("復元に失敗しました: " + err.message);
+    }
+  }
+
+  /** @param {string} iso @returns {string} */
+  function formatDateTime(iso) {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ` +
+      `${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
+  }
+
+  /* ----------------------------------------------------------------------
      初期化
      ---------------------------------------------------------------------- */
   document.addEventListener("keydown", (e) => {
@@ -356,7 +450,8 @@ const Modals = (() => {
     document.getElementById("search-button").addEventListener("click", openSearch);
     document.getElementById("trash-button").addEventListener("click", openTrash);
     document.getElementById("share-button").addEventListener("click", openShare);
+    document.getElementById("history-button").addEventListener("click", openHistory);
   });
 
-  return { openSearch, openTrash, openShare, closeModal };
+  return { openSearch, openTrash, openShare, openHistory, closeModal };
 })();
