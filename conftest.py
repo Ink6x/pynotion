@@ -15,7 +15,19 @@ DB アクセスを許可するため(pytest-django の標準的な手法)。
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractBaseUser
+from django.core.cache import cache
 from django.test import Client
+
+
+@pytest.fixture(autouse=True)
+def _clear_ratelimit_cache():
+    """各テスト前にキャッシュを初期化する。
+
+    書き込み系 API のレート制限カウンタ (django-ratelimit) はキャッシュに載り
+    DB ロールバックでは消えないため、テスト間でカウントが累積して偽陽性の 429 を
+    起こしうる。毎テスト前にクリアして独立性を保つ。
+    """
+    cache.clear()
 
 
 @pytest.fixture

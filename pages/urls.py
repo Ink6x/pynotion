@@ -1,25 +1,15 @@
-"""pages アプリの URL ルーティング。"""
+"""pages アプリの URL ルーティング。
+
+API は django-ninja (``pages.api``) が ``/api/`` 配下を一括で提供する。
+封筒・URL・ステータスは従来の関数ベース API と同一に保っている。
+OpenAPI / Swagger UI は ``/api/docs``、スキーマは ``/api/openapi.json``。
+"""
 from django.urls import path
 
-from . import api_blocks, api_pages, api_shares, views
+from . import views
+from .api import api
 
 urlpatterns = [
-    # アプリシェル
     path("", views.index, name="index"),
-    # ページ API
-    path("api/pages/", api_pages.page_collection),
-    path("api/pages/trash/", api_pages.trash_list),
-    path("api/pages/<uuid:page_id>/", api_pages.page_detail),
-    path("api/pages/<uuid:page_id>/restore/", api_pages.page_restore),
-    path("api/pages/<uuid:page_id>/permanent/", api_pages.page_permanent_delete),
-    path("api/pages/<uuid:page_id>/move/", api_pages.page_move),
-    # 共有 API
-    path("api/pages/<uuid:page_id>/shares/", api_shares.share_collection),
-    path("api/pages/<uuid:page_id>/shares/<int:user_id>/", api_shares.share_detail),
-    # ブロック API
-    path("api/pages/<uuid:page_id>/blocks/", api_blocks.block_collection),
-    path("api/blocks/<uuid:block_id>/", api_blocks.block_detail),
-    path("api/blocks/<uuid:block_id>/move/", api_blocks.block_move),
-    # 検索 API
-    path("api/search/", api_pages.search),
+    path("api/", api.urls),
 ]

@@ -95,3 +95,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Redis (Phase 2 以降のキャッシュ / Channels 用。healthz の疎通確認にも使う)
 REDIS_URL = env("REDIS_URL", default=None)
+
+# 書き込み系 API のレート制限 (django-ratelimit、ユーザー単位)。
+# 実行時参照のためテストでは override_settings で差し替えられる。
+WRITE_RATELIMIT = env("WRITE_RATELIMIT", default="120/m")
