@@ -9,8 +9,11 @@ environ.Env.read_env(BASE_DIR / ".env", overwrite=False)
 
 DEBUG = True
 
-# dev は collectstatic せずに配信する (STATIC_ROOT 未作成の警告も抑止)
+# dev は collectstatic せずに配信する (STATIC_ROOT 未作成の警告も抑止)。
+# USE_FINDERS で STATICFILES_DIRS から直接配信する (E2E の live_server でも
+# collectstatic なしに /static/ が解決できる)。
 WHITENOISE_AUTOREFRESH = True
+WHITENOISE_USE_FINDERS = True
 
 SECRET_KEY = env(
     "DJANGO_SECRET_KEY",

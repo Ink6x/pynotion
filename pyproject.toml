@@ -18,6 +18,7 @@ dev = [
     "pytest-cov>=5.0",
     "django-debug-toolbar>=4.4",
     "locust>=2.29",
+    "pytest-playwright>=0.5",
 ]
 prod = [
     "gunicorn>=22.0",
@@ -41,6 +42,7 @@ testpaths = ["pages/tests", "config/tests", "accounts/tests"]
 markers = [
     "unit: 単体テスト",
     "integration: 統合テスト",
+    "e2e: ブラウザ E2E (Playwright、testpaths 外。専用ジョブで実行)",
 ]
 
 [tool.coverage.run]

@@ -23,6 +23,10 @@ htmlcov/
 .ruff_cache/
 .mypy_cache/
 
+# E2E (Playwright)
+/test-results/
+.rufftmp/
+
 # Editor / OS
 .vscode/
 .idea/
