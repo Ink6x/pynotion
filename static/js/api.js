@@ -9,6 +9,12 @@ const API = (() => {
     return match ? decodeURIComponent(match[1]) : null;
   }
 
+  // このタブ固有の識別子。書き込み時にサーバへ送り、WebSocket ブロードキャストの
+  // 自己エコーを購読側で除去するために使う (Realtime.clientId と一致させる)。
+  const clientId =
+    (window.crypto && crypto.randomUUID && crypto.randomUUID()) ||
+    "c" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+
   /**
    * @param {string} method
    * @param {string} url
@@ -20,6 +26,7 @@ const API = (() => {
     if (method !== "GET") {
       headers["Content-Type"] = "application/json";
       headers["X-CSRFToken"] = getCookie("csrftoken") || "";
+      headers["X-Client-Id"] = clientId;
     }
     const res = await fetch(url, {
       method,
@@ -42,6 +49,7 @@ const API = (() => {
   }
 
   return {
+    clientId,
     // ページ
     pageTree: () => request("GET", "/api/pages/"),
     createPage: (payload) => request("POST", "/api/pages/", payload || {}),

@@ -15,12 +15,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 env = environ.Env()
 
 INSTALLED_APPS = [
+    # daphne は runserver を ASGI 対応にするため最上段に置く (Channels の作法)
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "channels",
     "accounts",
     "pages",
 ]
@@ -74,6 +77,14 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
+
+# Channels のチャネルレイヤ。既定はプロセス内 (dev / テスト)。
+# 本番は REDIS_URL があれば prod.py で channels_redis に差し替える
+# (複数ワーカー間で WebSocket をブロードキャストするため)。
+CHANNEL_LAYERS = {
+    "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
+}
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

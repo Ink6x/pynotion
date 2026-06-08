@@ -37,6 +37,7 @@
       </div>
       <div id="page-view" class="hidden">
         <div class="page-actions">
+          <span id="presence" class="presence hidden" aria-live="polite"></span>
           <button class="btn btn-ghost" id="share-button" type="button">🔗 共有</button>
         </div>
         <div class="page-icon" id="page-icon" title="アイコンを変更"></div>
@@ -51,7 +52,9 @@
 {% endblock %}
 
 {% block scripts %}
+<script>window.CURRENT_USERNAME = "{{ request.user.username|escapejs }}";</script>
 <script src="{% static 'js/api.js' %}"></script>
+<script src="{% static 'js/realtime.js' %}"></script>
 <script src="{% static 'js/sidebar.js' %}"></script>
 <script src="{% static 'js/editor.js' %}"></script>
 <script src="{% static 'js/slashmenu.js' %}"></script>

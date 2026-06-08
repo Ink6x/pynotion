@@ -409,6 +409,9 @@ class Block(models.Model):
     checked = models.BooleanField(default=False)
     collapsed = models.BooleanField(default=False)
     position = models.CharField(max_length=255)
+    # 楽観ロック用バージョン。本文更新のたびに +1 し、競合検出に使う
+    # (クライアントが見ていた version と不一致なら 409)。
+    version = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

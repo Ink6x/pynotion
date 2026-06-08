@@ -82,13 +82,36 @@ const App = (() => {
 
     Sidebar.setActive(id);
     if (window.Editor) Editor.open(currentPage, data.blocks);
+    // このページのリアルタイムチャンネルを購読する
+    if (window.Realtime) Realtime.connect(id);
   }
 
   function showEmpty() {
     currentPage = null;
+    if (window.Realtime) Realtime.disconnect();
     document.getElementById("page-view").classList.add("hidden");
     document.getElementById("page-empty").classList.remove("hidden");
     Sidebar.setActive(null);
+  }
+
+  /**
+   * 同じページを見ているユーザーをヘッダーに表示する (プレゼンス)。
+   * @param {Array<string>} members
+   */
+  function setPresence(members) {
+    const el = document.getElementById("presence");
+    if (!el) return;
+    // 自分以外が居るときだけ表示する
+    const others = (members || []).filter((m) => m !== window.CURRENT_USERNAME);
+    if (others.length === 0) {
+      el.classList.add("hidden");
+      el.textContent = "";
+      el.title = "";
+      return;
+    }
+    el.classList.remove("hidden");
+    el.textContent = others.length === 1 ? `👤 ${others[0]}` : `👥 ${others.length}`;
+    el.title = "閲覧中: " + others.join(", ");
   }
 
   /** ゴミ箱送りされたページが表示中なら空表示に戻す。 @param {string} id */
@@ -197,5 +220,6 @@ const App = (() => {
     closePopovers,
     toast,
     currentPageId,
+    setPresence,
   };
 })();

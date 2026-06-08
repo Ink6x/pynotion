@@ -25,6 +25,13 @@ if REDIS_URL:
             "LOCATION": REDIS_URL,
         }
     }
+    # WebSocket のブロードキャストを全ワーカーへ届けるため Redis チャネルレイヤを使う
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {"hosts": [REDIS_URL]},
+        }
+    }
 
 # 本番は通常 PostgreSQL。ただし CI の deploy-check は SQLite を渡すため、
 # エンジンを見て条件付きで有効化する (psycopg 不在環境での import 失敗を防ぐ)。

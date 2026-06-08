@@ -35,5 +35,7 @@ RUN DJANGO_SECRET_KEY=build-only-dummy-key-not-used-at-runtime-0123456789 \
 USER app
 EXPOSE 8000
 
+# WebSocket (Channels) を扱うため ASGI で起動する。
+# gunicorn のプロセス管理 + uvicorn の ASGI ワーカーを併用 (本番定番構成)。
 # ワーカー数は環境変数で上書き可能 (目安: 2 * CPU + 1)
-CMD ["sh", "-c", "gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-3} --access-logfile -"]
+CMD ["sh", "-c", "gunicorn config.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-3} --access-logfile -"]

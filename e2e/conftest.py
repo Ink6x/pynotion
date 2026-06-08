@@ -19,6 +19,25 @@ import pytest  # noqa: E402
 pytestmark = pytest.mark.e2e
 
 
+@pytest.hookimpl(trylast=True)
+def pytest_configure(config):
+    """Windows で Playwright のドライバ起動を可能にする (テストハーネス専用)。
+
+    Channels 導入で daphne を INSTALLED_APPS に加えたため、django.setup() 時に
+    daphne が Twisted の asyncio リアクタを入れ、イベントループポリシーが
+    ``WindowsSelectorEventLoopPolicy`` に切り替わる。Selector ループは Windows で
+    サブプロセスを生成できず、Playwright のドライバ起動が NotImplementedError で
+    失敗する。django.setup() 後 (trylast) に Proactor へ戻して回避する。
+    Linux/CI は既定でサブプロセス対応のため影響しない。
+    """
+    import sys
+
+    if sys.platform == "win32":
+        import asyncio
+
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+
 @pytest.fixture
 def app(live_server, page):
     """サインアップ済みの状態でアプリのトップを開いた `page` を返す。

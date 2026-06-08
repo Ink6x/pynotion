@@ -18,6 +18,7 @@ import uuid
 
 from django.conf import settings
 from django.core.serializers.json import DjangoJSONEncoder
+from django.db import transaction
 from django_ratelimit.core import is_ratelimited
 from django_ratelimit.exceptions import Ratelimited
 from ninja import NinjaAPI
@@ -26,9 +27,10 @@ from ninja.renderers import BaseRenderer
 from ninja.security import django_auth
 
 from .cache import get_cached_tree, invalidate_trees, set_cached_tree
-from .http import fail, ok
+from .http import ConflictError, fail, ok
 from .models import Block, BlockType, Page, PageShare, Role, accessible_page_ids
 from .permissions import NOT_FOUND_MESSAGE, check_page_role
+from .realtime import broadcast_block_event
 from .schemas import (
     BlockCreateIn,
     BlockMoveIn,
@@ -109,6 +111,11 @@ def _on_lookup_error(request, exc):
     return fail(str(exc), status=404)
 
 
+@api.exception_handler(ConflictError)
+def _on_conflict_error(request, exc):
+    return fail(str(exc), status=409)
+
+
 # --- 共通ヘルパー -----------------------------------------------------------
 
 
@@ -165,6 +172,24 @@ def _resolve_after_block(after_id: uuid.UUID | None, page: Page):
     if block is None:
         raise ValueError("after_id のブロックが見つかりません")
     return block
+
+
+def _client_id(request) -> str | None:
+    """変更元クライアント識別子 (購読側でのエコー除去用)。"""
+    return request.headers.get("X-Client-Id")
+
+
+def _broadcast(request, page_id, action: str, data: dict) -> None:
+    """ブロック変更を同一ページの購読者へ配信する (送信元は除外)。
+
+    DB コミット後に送る (on_commit) ことで「購読者が変更通知を受けて再取得したのに
+    まだ行が見えない」事象を防ぐ。autocommit 環境では即時に実行される。
+    on_commit コールバックは同期コンテキストで走るため async_to_sync も安全。
+    """
+    client_id = _client_id(request)
+    transaction.on_commit(
+        lambda: broadcast_block_event(page_id, action, data, client_id=client_id)
+    )
 
 
 def _resolve_parent_block(parent_id: uuid.UUID | None, page: Page):
@@ -335,6 +360,7 @@ def create_block(request, page_id: uuid.UUID, payload: BlockCreateIn):
         parent=_resolve_parent_block(payload.parent_id, page),
         after=_resolve_after_block(payload.after_id, page),
     )
+    _broadcast(request, page.id, "created", {"block": serialize_block(block)})
     return ok({"block": serialize_block(block)}, status=201)
 
 
@@ -343,20 +369,32 @@ def update_block(request, block_id: uuid.UUID, payload: BlockUpdateIn):
     _enforce_write_ratelimit(request)
     block = _get_editable_block(block_id, request.user)
     fields = payload.model_fields_set
+    # 楽観ロック: version が送られていて現在値と異なれば競合 (409)。
+    if "version" in fields and payload.version is not None and payload.version != block.version:
+        raise ConflictError("ブロックが他の編集で更新されています。最新を取得してください")
     update_fields = ["updated_at"]
+    content_changed = False
     if "type" in fields:
         block.type = _validate_block_type(payload.type)
         update_fields.append("type")
+        content_changed = True
     if "text" in fields:
         block.text = payload.text or ""
         update_fields.append("text")
+        content_changed = True
     if "checked" in fields:
         block.checked = bool(payload.checked)
         update_fields.append("checked")
+        content_changed = True
     if "collapsed" in fields:
+        # collapsed は表示状態であって本文ではないため version を進めない
         block.collapsed = bool(payload.collapsed)
         update_fields.append("collapsed")
+    if content_changed:
+        block.version += 1
+        update_fields.append("version")
     block.save(update_fields=update_fields)
+    _broadcast(request, block.page_id, "updated", {"block": serialize_block(block)})
     return {"block": serialize_block(block)}
 
 
@@ -364,7 +402,9 @@ def update_block(request, block_id: uuid.UUID, payload: BlockUpdateIn):
 def delete_block(request, block_id: uuid.UUID):
     _enforce_write_ratelimit(request)
     block = _get_editable_block(block_id, request.user)
+    page_id = block.page_id
     block.delete()
+    _broadcast(request, page_id, "deleted", {"id": str(block_id)})
     return {"deleted": True}
 
 
@@ -378,6 +418,7 @@ def move_block(request, block_id: uuid.UUID, payload: BlockMoveIn):
         parent = block.parent
     after = _resolve_after_block(payload.after_id, block.page)
     Block.objects.move(block, parent=parent, after=after)
+    _broadcast(request, block.page_id, "moved", {"block": serialize_block(block)})
     return {"block": serialize_block(block)}
 
 
