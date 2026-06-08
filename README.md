@@ -9,8 +9,9 @@ contenteditable ベース自作ブロックエディタ。デザインは
 [DESIGN.md](./DESIGN.md)(Notion 日本語版のデザイン仕様)に準拠した
 ダーク基調(`#191918`)+ ライトテーマ切替対応。
 
-マルチユーザー対応(セッション認証 + 継承付き RBAC 共有)。
-開発は SQLite、本番は Docker + PostgreSQL + Redis 構成。
+マルチユーザー対応(セッション認証 + 継承付き RBAC 共有)。複数ユーザーの
+同時編集は Django Channels(WebSocket)でリアルタイムに同期する。
+開発は SQLite、本番は Docker + PostgreSQL + Redis 構成(ASGI 配信)。
 
 ## セットアップ (開発)
 
@@ -53,6 +54,7 @@ http://localhost:8000 で利用できる。死活監視は `GET /healthz`
 | 階層ページ | サイドバーのページツリー、無限ネスト、展開状態の記憶 |
 | ブロックエディタ | 段落 / 見出し1-3 / ToDo / 箇条書き / 番号付き / 引用 / 区切り線 / コード / トグル |
 | ブロックのネスト | `Tab` / `Shift+Tab` でインデント、トグルの開閉。最大 5 階層、循環・ページ跨ぎを防止 |
+| リアルタイム同期 | 同じページを開いている他ユーザーへブロック変更を WebSocket で即時反映(Channels)。`Block.version` の楽観ロックで競合を 409 検出。プレゼンス表示(誰が閲覧中か) |
 | スラッシュコマンド | `/` でブロックタイプメニュー(インクリメンタル絞り込み) |
 | Markdown 風入力 | `# ` `## ` `- ` `1. ` `[] ` `> ` ` ``` ` `---` で自動変換 |
 | ブロック操作 | Enter で分割、行頭 Backspace で結合、⠿ ハンドルのドラッグ並べ替え |
@@ -81,6 +83,7 @@ http://localhost:8000 で利用できる。死活監視は `GET /healthz`
 ```
 config/
   settings/       base / dev / prod の 3 層 (django-environ)
+  asgi.py         ProtocolTypeRouter (HTTP=Django / WebSocket=Channels)
   views.py        /healthz (DB / Redis 疎通)
   logging.py      構造化ログ (1 行 1 JSON)
 accounts/         カスタムユーザー + サインアップ / ログイン / ログアウト
@@ -93,17 +96,21 @@ pages/
   cache.py        ページツリーの Redis キャッシュ (世代カウンタで無効化)
   api.py          django-ninja API (/api/ 全体、OpenAPI 自動生成、レート制限)
   schemas.py      pydantic リクエストスキーマ (書き込み系の型付け)
-  http.py         {ok, data, error} レスポンス封筒 + 401/403/404/429 変換
+  http.py         {ok, data, error} レスポンス封筒 + 401/403/404/409/429 変換
   serializers.py  JSON シリアライザ (ツリー構築 / 共有)
+  consumers.py    WebSocket Consumer (購読・ブロードキャスト転送・プレゼンス)
+  routing.py      WebSocket ルーティング (ws/pages/<id>/)
+  realtime.py     REST 書き込み後のブロードキャストヘルパー (group_send)
 static/
   css/tokens.css  DESIGN.md のデザイントークン (CSS Custom Properties)
   css/*.css       アプリシェル / サイドバー / エディタ / 認証画面
-  js/api.js       CSRF 対応 fetch ラッパー
-  js/editor.js    ブロックエディタ (分割・結合・自動保存・DnD)
+  js/api.js       CSRF 対応 fetch ラッパー (X-Client-Id 付与)
+  js/realtime.js  WebSocket クライアント (購読・再接続・プレゼンス反映)
+  js/editor.js    ブロックエディタ (分割・結合・自動保存・DnD・ネスト・リモート反映)
   js/slashmenu.js スラッシュコマンド
   js/sidebar.js   ページツリー
   js/modals.js    検索 / ゴミ箱 / 共有モーダル
-  js/app.js       初期化・ページ表示・テーマ
+  js/app.js       初期化・ページ表示・テーマ・リアルタイム購読
 templates/        base.html / app.html / accounts/
 Dockerfile        マルチステージ (非 root、ビルド時 collectstatic)
 docker-compose.yml  web / postgres / redis
@@ -125,6 +132,14 @@ locustfile.py     locust 負荷試験シナリオ
   エディタ側はツリーを「depth 付きの一次元リスト」へ平坦化して扱い、
   分割・結合・矢印移動は視覚順のまま動かしつつ `Tab`/`Shift+Tab` で親を
   付け替える(Notion と同じ視覚モデル)
+- **リアルタイム同期**: Django Channels で `ws/pages/<id>/` を購読。**REST を
+  信頼できる単一の源 (source of truth)** とし、書き込みは従来どおり django-ninja
+  API が処理(認可・レート制限・楽観ロックを一元化)、成功後に Channels で
+  ページ group へブロードキャストする。WebSocket 側は受信とプレゼンスに専念し、
+  認可を二重実装しない(= WebSocket 経由の不正書き込み口を作らない)。viewer は
+  受信専用。`Block.version` の楽観ロックで競合を 409 検出。`X-Client-Id` で自己
+  エコーを除去し、同位置同時挿入は fractional indexing のキーで構造的に解決する。
+  チャネルレイヤは dev/テストがインメモリ、本番は Redis(複数ワーカー間配信)
 - **ゴミ箱**: `is_deleted` + `deleted_at` のソフトデリート。子孫へカスケードし、
   復元は「同時に削除されたもの」だけを対象にする
 - **API**: django-ninja で `/api/` を提供。全レスポンスを `{ok, data, error}`
@@ -147,7 +162,7 @@ locustfile.py     locust 負荷試験シナリオ
 pytest --cov=pages --cov=config --cov=accounts --cov-report=term-missing
 ```
 
-145 件 / カバレッジ 96%(CI は SQLite で 90% ゲート、別途 PostgreSQL ジョブで
+158 件 / カバレッジ 96%(CI は SQLite で 90% ゲート、別途 PostgreSQL ジョブで
 全文検索パスを実 DB 検証)。SQLite→PostgreSQL のデータ移行手順は
 [docs/postgres-migration.md](./docs/postgres-migration.md) を参照。
 

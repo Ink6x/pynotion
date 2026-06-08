@@ -79,13 +79,16 @@
 
 ### C-3a. リアルタイム同期(ブロック粒度)
 
-- [ ] Django Channels + Redis channel layer(ASGI 化)
-- [ ] WebSocket セッション認証(viewer は受信のみ)
-- [ ] `Block.version` 楽観ロック(version 不一致 → 409)
-- [ ] ページ group へのブロック変更ブロードキャスト + クライアント反映
-- [ ] 同位置同時挿入の client_id タイブレーク
-- [ ] 切断・再接続時の状態同期
-- [ ] プレゼンス表示(誰がページを見ているか)
+- [x] Django Channels + Redis channel layer(ASGI 化、dev/テストはインメモリ層)
+- [x] WebSocket セッション認証(`AuthMiddlewareStack`、未認証/権限なしは reject、
+      viewer は受信のみ)
+- [x] `Block.version` 楽観ロック(version 不一致 → 409)
+- [x] ページ group へのブロック変更ブロードキャスト + クライアント反映
+      (REST を source of truth に固定、書き込み成功後に `group_send`)
+- [x] 同位置同時挿入の client_id タイブレーク(fractional indexing + `X-Client-Id`
+      による自己エコー除去)
+- [x] 切断・再接続時の状態同期(指数バックオフ再接続 + 再接続時に再取得)
+- [x] プレゼンス表示(誰がページを見ているか)
 
 ### F. バージョン履歴
 

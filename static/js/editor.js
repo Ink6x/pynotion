@@ -440,6 +440,59 @@ const Editor = (() => {
     }
   }
 
+  /* ----------------------------------------------------------------------
+     リモート同期 (WebSocket 受信の反映)
+     ---------------------------------------------------------------------- */
+
+  let remoteReloadTimer = null;
+
+  /** 現在のフォーカス位置を保ったまま再読み込みする (構造変化のリモート反映)。 */
+  function scheduleRemoteReload() {
+    clearTimeout(remoteReloadTimer);
+    remoteReloadTimer = setTimeout(() => {
+      const active = document.activeElement;
+      const row = active && active.closest ? active.closest(".block") : null;
+      const focusId = row ? row.dataset.blockId : null;
+      const offset = focusId ? caretOffset(contentEl(focusId)) : null;
+      reload(focusId, offset);
+    }, 250);
+  }
+
+  /** 開いているページの再読み込み (再接続時の追いつき用)。 */
+  function reloadCurrent() {
+    if (page) scheduleRemoteReload();
+  }
+
+  /**
+   * 他クライアントのブロック変更を反映する。
+   * @param {string} action "created" | "updated" | "deleted" | "moved"
+   * @param {object} data
+   */
+  function applyRemote(action, data) {
+    if (!page) return;
+    if (action === "updated" && data && data.block) {
+      const b = data.block;
+      if (blockIndex(b.id) === -1) {
+        scheduleRemoteReload();
+        return;
+      }
+      // 自分が編集中のブロックは上書きしない (保存時の楽観ロックに委ねる)
+      const el = contentEl(b.id);
+      if (el && document.activeElement === el) return;
+      patchBlock(b.id, {
+        type: b.type,
+        text: b.text,
+        checked: b.checked,
+        collapsed: b.collapsed,
+        version: b.version,
+      });
+      rerenderBlock(b.id);
+      return;
+    }
+    // created / deleted / moved は構造変化のため再取得でツリーを整合させる
+    scheduleRemoteReload();
+  }
+
   /** toggle の開閉。子孫の表示/非表示を切り替える。 @param {string} id */
   async function toggleCollapse(id) {
     const block = blocks[blockIndex(id)];
@@ -799,7 +852,14 @@ const Editor = (() => {
     root().addEventListener("drop", handleDrop);
   });
 
-  return { open, focusFirstBlock, applySlashCommand, caretOffset };
+  return {
+    open,
+    focusFirstBlock,
+    applySlashCommand,
+    caretOffset,
+    applyRemote,
+    reloadCurrent,
+  };
 })();
 
 // クラシックスクリプトの最上位 const は window のプロパティにならないため、

@@ -44,6 +44,8 @@ class BlockUpdateIn(Schema):
     text: str | None = None
     checked: bool | None = None
     collapsed: bool | None = None
+    # 楽観ロック: クライアントが最後に見た version。送られた場合のみ競合検査する。
+    version: int | None = None
 
 
 class BlockMoveIn(Schema):

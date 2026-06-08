@@ -353,8 +353,20 @@ kbd {
    -------------------------------------------------------------------------- */
 .page-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: var(--space-s);
   padding: var(--space-s) var(--space-m) 0;
+}
+
+/* 同じページを見ている他ユーザー (プレゼンス) */
+.presence {
+  font-size: var(--text-caption-size);
+  color: var(--color-text-secondary);
+  padding: 2px 8px;
+  border-radius: var(--radius-s);
+  background: var(--color-bg-subtle, rgba(127, 127, 127, 0.12));
+  white-space: nowrap;
 }
 
 .share-form {

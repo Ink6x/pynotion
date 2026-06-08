@@ -33,6 +33,7 @@ def serialize_block(block: Block) -> dict:
         "collapsed": block.collapsed,
         "parent_id": str(block.parent_id) if block.parent_id else None,
         "position": block.position,
+        "version": block.version,
     }
 
 

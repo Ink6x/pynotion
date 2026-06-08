@@ -6,6 +6,10 @@ from collections.abc import Callable
 from django.http import HttpRequest, JsonResponse
 
 
+class ConflictError(Exception):
+    """楽観ロックの競合 (クライアントの version が古い)。→ 409。"""
+
+
 def ok(data: dict, status: int = 200) -> JsonResponse:
     """成功レスポンス。"""
     return JsonResponse({"ok": True, "data": data, "error": None}, status=status)
