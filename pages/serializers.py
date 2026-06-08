@@ -1,8 +1,16 @@
-"""Page / Block の JSON シリアライザ。"""
+"""Page / Block / PageShare の JSON シリアライザ。"""
 from collections import defaultdict
 from collections.abc import Iterable
 
-from .models import Block, Page
+from .models import Block, Page, PageShare
+
+
+def serialize_share(share: PageShare) -> dict:
+    return {
+        "user_id": share.user_id,
+        "username": share.user.username,
+        "role": share.role,
+    }
 
 
 def serialize_page(page: Page) -> dict:

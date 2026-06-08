@@ -45,10 +45,10 @@
 
 ### H. API 体系化
 
-- [ ] django-ninja 部分導入(既存封筒 `{ok, data, error}` と整合)
-- [ ] pydantic リクエストスキーマ
-- [ ] OpenAPI / Swagger UI 自動生成
-- [ ] `django-ratelimit` で書き込み系 API にレート制限
+- [x] django-ninja 導入(`/api/` 全体、既存封筒 `{ok, data, error}`・URL・ステータス互換)
+- [x] pydantic リクエストスキーマ(`pages/schemas.py`)
+- [x] OpenAPI / Swagger UI 自動生成(`/api/docs`、`/api/openapi.json`)
+- [x] `django-ratelimit` で書き込み系 API にレート制限(超過→封筒 429)
 
 ### K. Playwright E2E
 
