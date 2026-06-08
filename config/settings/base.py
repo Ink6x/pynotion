@@ -25,6 +25,19 @@ INSTALLED_APPS = [
     "pages",
 ]
 
+
+def with_postgres_app(installed_apps: list[str], databases: dict) -> list[str]:
+    """default DB が PostgreSQL のときだけ ``django.contrib.postgres`` を加える。
+
+    このアプリは読み込み時に psycopg を import するため、SQLite 環境
+    (ゼロ設定の開発・CI の deploy-check) では追加してはならない。
+    全文検索 (SearchVector / TrigramSimilarity / trigram_similar ルックアップ) は
+    PostgreSQL 経路でのみ実行されるので、その環境でだけ有効化すれば足りる。
+    """
+    if databases["default"]["ENGINE"].endswith("postgresql"):
+        return [*installed_apps, "django.contrib.postgres"]
+    return installed_apps
+
 AUTH_USER_MODEL = "accounts.User"
 
 LOGIN_URL = "accounts:login"

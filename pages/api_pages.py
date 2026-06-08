@@ -6,13 +6,13 @@
 - 完全削除 = full_access
 - ゴミ箱一覧 = 自分が所有するページのみ (Phase 1 の簡素化)
 """
-from django.db.models import Q
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from .http import json_api, ok, parse_body
 from .models import Page, Role, accessible_page_ids
 from .permissions import check_page_role, require_role
+from .search import search_pages
 from .serializers import serialize_block, serialize_page, serialize_tree
 
 
@@ -155,15 +155,13 @@ def page_move(request: HttpRequest, page: Page) -> JsonResponse:
 @require_GET
 @json_api
 def search(request: HttpRequest) -> JsonResponse:
-    query = request.GET.get("q", "").strip()
-    if not query:
-        return ok({"pages": []})
-    ids = accessible_page_ids(request.user)
-    pages = (
-        Page.objects.alive()
-        .filter(pk__in=ids)
-        .filter(Q(title__icontains=query) | Q(blocks__text__icontains=query))
-        .distinct()
-        .order_by("-updated_at")
+    query = request.GET.get("q", "")
+    pages = search_pages(request.user, query)
+    return ok(
+        {
+            "pages": [
+                {**serialize_page(p), "snippet": getattr(p, "search_snippet", None)}
+                for p in pages
+            ]
+        }
     )
-    return ok({"pages": [serialize_page(p) for p in pages]})
