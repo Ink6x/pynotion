@@ -56,7 +56,7 @@ http://localhost:8000 で利用できる。死活監視は `GET /healthz`
 | Markdown 風入力 | `# ` `## ` `- ` `1. ` `[] ` `> ` ` ``` ` `---` で自動変換 |
 | ブロック操作 | Enter で分割、行頭 Backspace で結合、⠿ ハンドルのドラッグ並べ替え |
 | ページアイコン | 絵文字ピッカー、タイトルのインライン編集(自動保存) |
-| 検索 | `Ctrl+K` でページ横断検索(タイトル + 本文) |
+| 検索 | `Ctrl+K` でページ横断検索(タイトル + 本文)。PostgreSQL では pg_trgm + SearchVector のハイブリッド全文検索(曖昧一致・スニペット)、SQLite では部分一致フォールバック |
 | ゴミ箱 | ソフトデリート、復元、完全削除 |
 | テーマ | ダーク / ライト切替(永続化) |
 | 日本語 IME | 変換中のキー操作を奪わない composition 対応 |
@@ -86,6 +86,7 @@ pages/
                   fractional indexing、RBAC ロール解決)
   permissions.py  @require_role デコレータ (認可の一元化)
   ordering.py     並び順キー生成 (rocicorp/fractional-indexing の midpoint 移植)
+  search.py       全文検索 (PostgreSQL=pg_trgm+SearchVector / SQLite=icontains)
   api_pages.py    ページ CRUD / 移動 / ゴミ箱 / 検索 API
   api_blocks.py   ブロック CRUD / 並べ替え API
   api_shares.py   共有管理 API (full_access 限定)
@@ -103,7 +104,8 @@ static/
 templates/        base.html / app.html / accounts/
 Dockerfile        マルチステージ (非 root、ビルド時 collectstatic)
 docker-compose.yml  web / postgres / redis
-.github/workflows/ci.yml  ruff → pytest (カバレッジ 90% ゲート) → docker build
+.github/workflows/ci.yml  ruff → pytest (SQLite, カバレッジ 90% ゲート)
+                          → pytest (PostgreSQL, 全文検索) → docker build
 ```
 
 ### 設計メモ
@@ -129,7 +131,9 @@ docker-compose.yml  web / postgres / redis
 pytest --cov=pages --cov=config --cov=accounts --cov-report=term-missing
 ```
 
-114 件 / カバレッジ 97%(CI は 90% をゲートに ruff → pytest → docker build)。
+119 件 / カバレッジ 97%(CI は SQLite で 90% ゲート、別途 PostgreSQL ジョブで
+全文検索パスを実 DB 検証)。SQLite→PostgreSQL のデータ移行手順は
+[docs/postgres-migration.md](./docs/postgres-migration.md) を参照。
 
 ## ライセンス
 

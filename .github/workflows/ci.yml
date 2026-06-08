@@ -45,9 +45,44 @@ jobs:
           DATABASE_URL: sqlite:///ci-check.sqlite3
         run: python manage.py check --deploy --fail-level WARNING
 
+  test-postgres:
+    name: Test (PostgreSQL, 全文検索)
+    needs: lint
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: pynotion
+          POSTGRES_PASSWORD: pynotion
+          POSTGRES_DB: pynotion
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pynotion"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # dev 設定 + DATABASE_URL で PostgreSQL に切り替える。
+      # pg_trgm / SearchVector の検索パス (pages.search._search_postgres) を実検証する。
+      DATABASE_URL: postgres://pynotion:pynotion@localhost:5432/pynotion
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies (dev + prod = psycopg)
+        run: pip install -e ".[dev,prod]"
+      - name: Migrate (pg_trgm 拡張 + GIN インデックス作成)
+        run: python manage.py migrate
+      - name: Run tests on PostgreSQL
+        run: pytest -q
+
   docker:
     name: Docker build
-    needs: test
+    needs: [test, test-postgres]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

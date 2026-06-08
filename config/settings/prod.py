@@ -8,13 +8,17 @@
 `manage.py check --deploy` をエラー 0 で通過することを CI で保証する。
 """
 from .base import *  # noqa: F403
-from .base import env
+from .base import INSTALLED_APPS, env, with_postgres_app
 
 DEBUG = False
 
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
 DATABASES = {"default": env.db("DATABASE_URL")}
+
+# 本番は通常 PostgreSQL。ただし CI の deploy-check は SQLite を渡すため、
+# エンジンを見て条件付きで有効化する (psycopg 不在環境での import 失敗を防ぐ)。
+INSTALLED_APPS = with_postgres_app(INSTALLED_APPS, DATABASES)
 
 CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 

@@ -35,12 +35,13 @@
 
 ### B. PostgreSQL 移行 + 全文検索
 
-- [ ] `dj-database-url` + 環境変数化(SQLite はローカル温存)
-- [ ] SQLite → PostgreSQL データ移行手順の確立
-- [ ] `pg_trgm` 拡張 + トライグラム検索(日本語)
-- [ ] `SearchVector` + `GinIndex`(英数字)とのハイブリッド
-- [ ] `SearchHeadline` スニペット / `SearchRank` 関連度順
-- [ ] 検索 API の置換(`api_pages.py` の icontains 廃止)+ テスト
+- [x] `dj-database-url` + 環境変数化(SQLite はローカル温存)
+- [x] SQLite → PostgreSQL データ移行手順の確立([docs/postgres-migration.md](../postgres-migration.md))
+- [x] `pg_trgm` 拡張 + トライグラム検索(日本語)
+- [x] `SearchVector` + `GinIndex`(英数字)とのハイブリッド
+- [x] `SearchHeadline` スニペット / `SearchRank` 関連度順
+- [x] 検索 API の置換(`api_pages.py` の icontains 廃止)+ テスト
+- [x] CI に PostgreSQL ジョブを追加(pg_trgm 検索パスを実検証)
 
 ### H. API 体系化
 
