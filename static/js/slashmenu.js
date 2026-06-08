@@ -177,3 +177,7 @@ const SlashMenu = (() => {
 
   return { onInput, handleKey, isOpen, close };
 })();
+
+// editor.js の `window.SlashMenu` 判定から参照できるよう明示公開する
+// (最上位 const は window プロパティにならないため)。
+window.SlashMenu = SlashMenu;

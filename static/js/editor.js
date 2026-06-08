@@ -610,3 +610,7 @@ const Editor = (() => {
 
   return { open, focusFirstBlock, applySlashCommand, caretOffset };
 })();
+
+// クラシックスクリプトの最上位 const は window のプロパティにならないため、
+// 他モジュール (app.js の `window.Editor` 判定) から参照できるよう明示公開する。
+window.Editor = Editor;

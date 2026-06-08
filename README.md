@@ -105,8 +105,10 @@ static/
 templates/        base.html / app.html / accounts/
 Dockerfile        マルチステージ (非 root、ビルド時 collectstatic)
 docker-compose.yml  web / postgres / redis
+e2e/              Playwright E2E (pytest-playwright + live_server、testpaths 外)
+locustfile.py     locust 負荷試験シナリオ
 .github/workflows/ci.yml  ruff → pytest (SQLite, カバレッジ 90% ゲート)
-                          → pytest (PostgreSQL, 全文検索) → docker build
+                          → pytest (PostgreSQL, 全文検索) → E2E → docker build
 ```
 
 ### 設計メモ
@@ -138,6 +140,18 @@ pytest --cov=pages --cov=config --cov=accounts --cov-report=term-missing
 126 件 / カバレッジ 96%(CI は SQLite で 90% ゲート、別途 PostgreSQL ジョブで
 全文検索パスを実 DB 検証)。SQLite→PostgreSQL のデータ移行手順は
 [docs/postgres-migration.md](./docs/postgres-migration.md) を参照。
+
+### E2E (Playwright)
+
+contenteditable の自作エディタはユニットで担保しづらいため、実ブラウザで
+主要フロー(サインアップ → ページ作成 → ブロック入力 → Markdown 自動変換 →
+スラッシュコマンド → DnD 並べ替え → 検索 → ゴミ箱復元)を E2E 化した。
+CI では専用ジョブで実行し、カバレッジゲートとは分離している。
+
+```bash
+python -m playwright install chromium
+pytest e2e/ -o addopts=""     # testpaths 外。明示指定で実行
+```
 
 ## パフォーマンス
 

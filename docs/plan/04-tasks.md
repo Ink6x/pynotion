@@ -52,10 +52,12 @@
 
 ### K. Playwright E2E
 
-- [ ] Playwright セットアップ + CI 組み込み
-- [ ] ページ作成 → ブロック入力 → Markdown 自動変換フロー
-- [ ] DnD 並べ替え / スラッシュコマンドフロー
-- [ ] 検索 → ゴミ箱復元フロー
+- [x] Playwright セットアップ(pytest-playwright + live_server)+ CI 専用ジョブ
+- [x] サインアップ → ページ作成 → ブロック入力 → Markdown 自動変換フロー
+- [x] DnD 並べ替え / スラッシュコマンドフロー
+- [x] 検索 → ゴミ箱復元フロー
+- [x] (E2E が検出) `window.Editor`/`window.SlashMenu` 未公開でエディタが
+      初期化されない実バグを修正
 
 ### J. パフォーマンス
 
