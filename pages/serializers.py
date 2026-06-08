@@ -30,8 +30,35 @@ def serialize_block(block: Block) -> dict:
         "type": block.type,
         "text": block.text,
         "checked": block.checked,
+        "collapsed": block.collapsed,
+        "parent_id": str(block.parent_id) if block.parent_id else None,
         "position": block.position,
     }
+
+
+def serialize_block_tree(blocks: Iterable[Block]) -> list[dict]:
+    """position 順のブロック一覧をネストしたツリーに変換する。
+
+    ``serialize_tree`` (ページ) と同じ方式: 1 クエリで全ブロックを取得して
+    メモリ上でツリーを組む (N+1 を避ける)。親が一覧に無いブロックはルート扱い。
+    """
+    block_list = list(blocks)
+    known_ids = {block.id for block in block_list}
+    by_parent: dict[object, list[Block]] = defaultdict(list)
+    roots: list[Block] = []
+    for block in block_list:
+        if block.parent_id is None or block.parent_id not in known_ids:
+            roots.append(block)
+        else:
+            by_parent[block.parent_id].append(block)
+
+    def node(block: Block) -> dict:
+        return {
+            **serialize_block(block),
+            "children": [node(child) for child in by_parent[block.id]],
+        }
+
+    return [node(block) for block in roots]
 
 
 def serialize_tree(pages: Iterable[Page]) -> list[dict]:

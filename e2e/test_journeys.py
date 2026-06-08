@@ -79,6 +79,51 @@ def test_block_reorder_via_drag_and_drop(app):
     expect(app.locator("#editor .block").nth(1).locator(".block-content")).to_have_text("最初")
 
 
+def test_tab_indents_block_under_previous(app):
+    """2 つ目のブロックで Tab を押すと 1 つ目の子としてインデントされる。"""
+    block = create_page_with_first_block(app)
+    block.click()
+    app.keyboard.type("親")
+    app.keyboard.press("Enter")
+
+    rows = app.locator("#editor .block")
+    expect(rows).to_have_count(2)
+    app.keyboard.type("子")
+    # 2 つ目で Tab → インデント (API 往復 + 再描画を伴う)
+    app.keyboard.press("Tab")
+
+    # 子ブロックの depth が 1 になり、左インデントが付く
+    child = app.locator("#editor .block", has_text="子")
+    expect(child).to_have_css("margin-left", "24px")
+
+
+def test_toggle_collapse_hides_children(app):
+    """toggle を折りたたむと配下の子ブロックが非表示になる。"""
+    block = create_page_with_first_block(app)
+    block.click()
+    # 1 つ目を toggle 化
+    app.keyboard.type("/")
+    menu = app.locator(".slash-menu")
+    expect(menu).to_be_visible()
+    menu.locator(".menu-item", has_text="トグル").click()
+    expect(app.locator("#editor .block.type-toggle")).to_have_count(1)
+    app.keyboard.type("トグル親")
+
+    # 子を作ってインデント
+    app.keyboard.press("Enter")
+    expect(app.locator("#editor .block")).to_have_count(2)
+    app.keyboard.type("中身")
+    app.keyboard.press("Tab")
+    expect(app.locator("#editor .block", has_text="中身")).to_have_css("margin-left", "24px")
+
+    # キャレットを折りたたむ
+    app.locator(".block-toggle-caret").click()
+    expect(app.locator("#editor .block", has_text="中身")).to_have_count(0)
+    # 再度展開すると現れる
+    app.locator(".block-toggle-caret").click()
+    expect(app.locator("#editor .block", has_text="中身")).to_have_count(1)
+
+
 def test_search_then_trash_and_restore(app):
     """検索でページを開き、ゴミ箱へ移動して復元する。"""
     create_page_with_first_block(app)

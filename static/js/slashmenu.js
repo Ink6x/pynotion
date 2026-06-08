@@ -14,6 +14,7 @@ const SlashMenu = (() => {
     { type: "quote", label: "引用", icon: "❝", keywords: ["quote", "inyou"] },
     { type: "divider", label: "区切り線", icon: "―", keywords: ["divider", "hr", "kugiri"] },
     { type: "code", label: "コード", icon: "</>", keywords: ["code"] },
+    { type: "toggle", label: "トグル", icon: "▸", keywords: ["toggle", "toguru", "fold"] },
   ];
 
   /** @type {{blockId: string, slashOffset: number, filter: string, selected: number} | null} */

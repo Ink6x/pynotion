@@ -39,7 +39,13 @@ from .schemas import (
     ShareCreateIn,
 )
 from .search import search_pages
-from .serializers import serialize_block, serialize_page, serialize_share, serialize_tree
+from .serializers import (
+    serialize_block,
+    serialize_block_tree,
+    serialize_page,
+    serialize_share,
+    serialize_tree,
+)
 
 
 class EnvelopeRenderer(BaseRenderer):
@@ -161,6 +167,16 @@ def _resolve_after_block(after_id: uuid.UUID | None, page: Page):
     return block
 
 
+def _resolve_parent_block(parent_id: uuid.UUID | None, page: Page):
+    """ネストの親ブロックを引く (同一ページ内に限る)。None ならルート。"""
+    if parent_id is None:
+        return None
+    block = Block.objects.filter(pk=parent_id, page=page).first()
+    if block is None:
+        raise ValueError("parent_id のブロックが見つかりません")
+    return block
+
+
 def _validate_block_type(value: str) -> str:
     if value not in BlockType.values:
         raise ValueError(f"不正なブロックタイプです: {value!r}")
@@ -220,7 +236,8 @@ def list_trash(request):
 @api.get("/pages/{uuid:page_id}/")
 def page_detail(request, page_id: uuid.UUID):
     page = _get_page(page_id, request.user, Role.VIEWER)
-    blocks = [serialize_block(b) for b in page.blocks.order_by("position")]
+    # 全ブロックを 1 クエリで取得し、メモリ上でネストツリーへ (N+1 なし)。
+    blocks = serialize_block_tree(page.blocks.order_by("position"))
     return {"page": serialize_page(page), "blocks": blocks}
 
 
@@ -315,6 +332,7 @@ def create_block(request, page_id: uuid.UUID, payload: BlockCreateIn):
         type=_validate_block_type(payload.type),
         text=payload.text,
         checked=payload.checked,
+        parent=_resolve_parent_block(payload.parent_id, page),
         after=_resolve_after_block(payload.after_id, page),
     )
     return ok({"block": serialize_block(block)}, status=201)
@@ -335,6 +353,9 @@ def update_block(request, block_id: uuid.UUID, payload: BlockUpdateIn):
     if "checked" in fields:
         block.checked = bool(payload.checked)
         update_fields.append("checked")
+    if "collapsed" in fields:
+        block.collapsed = bool(payload.collapsed)
+        update_fields.append("collapsed")
     block.save(update_fields=update_fields)
     return {"block": serialize_block(block)}
 
@@ -351,8 +372,12 @@ def delete_block(request, block_id: uuid.UUID):
 def move_block(request, block_id: uuid.UUID, payload: BlockMoveIn):
     _enforce_write_ratelimit(request)
     block = _get_editable_block(block_id, request.user)
+    if "parent_id" in payload.model_fields_set:
+        parent = _resolve_parent_block(payload.parent_id, block.page)
+    else:
+        parent = block.parent
     after = _resolve_after_block(payload.after_id, block.page)
-    Block.objects.move(block, after=after)
+    Block.objects.move(block, parent=parent, after=after)
     return {"block": serialize_block(block)}
 
 

@@ -35,6 +35,7 @@ class BlockCreateIn(Schema):
     type: str = "paragraph"
     text: str = ""
     checked: bool = False
+    parent_id: uuid.UUID | None = None
     after_id: uuid.UUID | None = None
 
 
@@ -42,9 +43,13 @@ class BlockUpdateIn(Schema):
     type: str | None = None
     text: str | None = None
     checked: bool | None = None
+    collapsed: bool | None = None
 
 
 class BlockMoveIn(Schema):
+    # parent_id は「未送信なら現在の親を維持」「null 送信ならルートへ」を区別するため
+    # model_fields_set で送信有無を見る (PageMoveIn と同じ規約)。
+    parent_id: uuid.UUID | None = None
     after_id: uuid.UUID | None = None
 
 
