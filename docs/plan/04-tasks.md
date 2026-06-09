@@ -106,12 +106,15 @@
 実装順序は **4-A → 4-B → 4-C → 4-D → 4-E**(スパイク先行)。
 詳細・根拠は [03-roadmap.md](./03-roadmap.md#phase-4-実装順序スパイク先行-確定-2026-06-09) を参照。
 
-### 4-A. CRDT スパイク + 判定(最初に着手)
+### 4-A. CRDT スパイク + 判定(最初に着手)— ✅ 完了 / **GO**
 
-- [ ] y-py(サーバ)+ Yjs(`editor.js`)の最小検証(単一ブロックを 2 タブで同期)
-- [ ] 「REST=source of truth」設計と CRDT 永続化の両立方針を決定
-- [ ] 設計判断を [02-architecture.md](./02-architecture.md) の判断記録へ追記
-- [ ] **go/no-go 判定**(no-go なら 4-D をスキップ、他成果で Phase 4 成立)
+- [x] サーバ側 CRDT バインディングの選定(y-py 更新停止 → **pycrdt** 採用)
+- [x] 収束性の検証(`pages/crdt.py` `BlockDoc` + `test_crdt_spike.py`: 並行編集の
+      収束・可換・冪等・削除複製・同期プロトコルの落とし穴を固定)
+- [x] 「REST=source of truth」設計と CRDT 永続化の両立方針を決定
+      (テキストのみ CRDT 化、構造操作は REST 楽観ロック維持、`Block.text` を耐久 source)
+- [x] 設計判断を [02-architecture.md](./02-architecture.md) の判断記録(#6 / #7)へ追記
+- [x] **go/no-go 判定 → GO**(4-D 本実装へ進む)
 
 ### 4-B. データベースビュー(D)
 
