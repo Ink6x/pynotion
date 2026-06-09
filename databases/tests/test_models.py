@@ -2,7 +2,14 @@
 import pytest
 from django.db import IntegrityError
 
-from databases.models import Database, DatabaseRow, PropertySchema, normalize_row_values
+from databases.models import (
+    Database,
+    DatabaseRow,
+    PropertySchema,
+    change_property_type,
+    forget_property_key,
+    normalize_row_values,
+)
 from pages.models import Page
 
 pytestmark = pytest.mark.django_db
@@ -135,6 +142,44 @@ def test_move_row_rejects_after_from_other_database(user, database, status_prop)
     there = DatabaseRow.objects.create_row(database=other_db, values={})
     with pytest.raises(ValueError, match="同じデータベース"):
         DatabaseRow.objects.move(here, after=there)
+
+
+def test_change_property_type_migrates_rows(database):
+    prop = PropertySchema.objects.create_property(
+        database=database, key="qty", name="数", type="text"
+    )
+    r1 = DatabaseRow.objects.create_row(database=database, values={"qty": "42"})
+    r2 = DatabaseRow.objects.create_row(database=database, values={"qty": "abc"})
+    change_property_type(prop, new_type="number")
+    prop.refresh_from_db()
+    r1.refresh_from_db()
+    r2.refresh_from_db()
+    assert prop.type == "number"
+    assert r1.values["qty"] == 42  # 数値へ移行
+    assert r2.values["qty"] is None  # 移行不能は空値へ
+
+
+def test_change_property_type_to_select_with_new_options(database):
+    prop = PropertySchema.objects.create_property(
+        database=database, key="s", name="S", type="text"
+    )
+    keep = DatabaseRow.objects.create_row(database=database, values={"s": "A"})
+    drop = DatabaseRow.objects.create_row(database=database, values={"s": "Z"})
+    change_property_type(prop, new_type="select", new_config={"options": ["A", "B"]})
+    keep.refresh_from_db()
+    drop.refresh_from_db()
+    assert keep.values["s"] == "A"  # 選択肢にある値は保持
+    assert drop.values["s"] is None  # 選択肢に無い値は空へ
+
+
+def test_forget_property_key_removes_stale_values(database):
+    prop = PropertySchema.objects.create_property(
+        database=database, key="gone", name="消える", type="text"
+    )
+    row = DatabaseRow.objects.create_row(database=database, values={"gone": "x"})
+    forget_property_key(database, prop.key)
+    row.refresh_from_db()
+    assert "gone" not in row.values
 
 
 def test_normalize_row_values_rejects_non_dict(database):

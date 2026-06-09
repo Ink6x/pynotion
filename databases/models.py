@@ -22,7 +22,7 @@ from django.db import models
 from pages.models import Page
 from pages.ordering import key_between
 
-from .properties import PropertyType, empty_value, validate_value
+from .properties import PropertyType, coerce_value, empty_value, validate_value
 
 # Enum を Django の choices へ展開(値は properties.PropertyType と一致)。
 PROPERTY_TYPE_CHOICES = [(t.value, t.value) for t in PropertyType]
@@ -251,6 +251,44 @@ class DatabaseView(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.type})"
+
+
+def change_property_type(
+    prop: PropertySchema, *, new_type: str, new_config: dict | None = None
+) -> None:
+    """プロパティの型を変更し、既存行の値を新しい型へ移行する。
+
+    全行の当該キーを ``coerce_value`` で移行(移行不能は空値へ)してから型/設定を
+    保存する。値は新しい dict へ差し替える(in-place 変更を避ける)。
+    """
+    new_type = PropertyType(new_type).value
+    config = new_config if new_config is not None else prop.config
+    rows = list(prop.database.rows.all())
+    changed: list[DatabaseRow] = []
+    for row in rows:
+        if prop.key in row.values:
+            row.values = {
+                **row.values,
+                prop.key: coerce_value(new_type, row.values[prop.key], config),
+            }
+            changed.append(row)
+    if changed:
+        DatabaseRow.objects.bulk_update(changed, ["values"])
+    prop.type = new_type
+    prop.config = config
+    prop.save(update_fields=["type", "config", "updated_at"])
+
+
+def forget_property_key(database: Database, key: str) -> None:
+    """全行の値辞書から ``key`` を取り除く(プロパティ削除後の後始末)。"""
+    rows = list(database.rows.all())
+    changed: list[DatabaseRow] = []
+    for row in rows:
+        if key in row.values:
+            row.values = {k: v for k, v in row.values.items() if k != key}
+            changed.append(row)
+    if changed:
+        DatabaseRow.objects.bulk_update(changed, ["values"])
 
 
 def normalize_row_values(database: Database, values: dict) -> dict:

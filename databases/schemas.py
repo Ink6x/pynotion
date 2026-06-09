@@ -21,6 +21,7 @@ class PropertyCreateIn(Schema):
 
 class PropertyUpdateIn(Schema):
     name: str | None = None
+    type: str | None = None
     config: dict | None = None
 
 

@@ -20,8 +20,11 @@ from .models import (
     DatabaseView,
     PropertySchema,
     ViewType,
+    change_property_type,
+    forget_property_key,
     normalize_row_values,
 )
+from .properties import PropertyType
 from .query import group_rows, rows_for_view, validate_view_spec
 from .schemas import (
     DatabaseCreateIn,
@@ -146,6 +149,17 @@ def update_property(
     database = _get_database(database_id, request.user, Role.EDITOR)
     prop = _get_property(database, property_id)
     fields = payload.model_fields_set
+
+    # 型変更は既存行の値移行を伴うため専用パスで扱う。
+    if "type" in fields and payload.type is not None and payload.type != prop.type:
+        new_type = PropertyType(payload.type).value  # 未知の型はここで弾く
+        new_config = payload.config if ("config" in fields and payload.config is not None) else None
+        if "name" in fields and payload.name is not None:
+            prop.name = payload.name
+            prop.save(update_fields=["name", "updated_at"])
+        change_property_type(prop, new_type=new_type, new_config=new_config)
+        return {"property": serialize_property(prop)}
+
     update_fields = ["updated_at"]
     if "name" in fields and payload.name is not None:
         prop.name = payload.name
@@ -162,9 +176,10 @@ def delete_property(request, database_id: uuid.UUID, property_id: uuid.UUID):
     _enforce_write_ratelimit(request)
     database = _get_database(database_id, request.user, Role.EDITOR)
     prop = _get_property(database, property_id)
-    # TODO(4-B-6): 既存行の values に残る当該 key は次回 update_row の正規化で
-    # 落ちるまで残存する。型変更マイグレーションと併せて一括クリーンアップする。
+    key = prop.key
     prop.delete()
+    # 既存行の values に残る当該 key を一括で取り除く(孤児キーの残存を防ぐ)。
+    forget_property_key(database, key)
     return {"deleted": True}
 
 

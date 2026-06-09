@@ -122,6 +122,60 @@ def test_delete_property(authenticated_client, database, status_prop):
     assert not PropertySchema.objects.filter(pk=status_prop.id).exists()
 
 
+def test_delete_property_cleans_stale_row_values(authenticated_client, database, status_prop):
+    row = DatabaseRow.objects.create_row(database=database, values={"status": "Todo"})
+    res = authenticated_client.delete(
+        f"/api/databases/{database.id}/properties/{status_prop.id}/"
+    )
+    assert res.status_code == 200
+    row.refresh_from_db()
+    assert "status" not in row.values  # 孤児キーが除去される
+
+
+def test_update_property_type_change_migrates(authenticated_client, database):
+    prop = PropertySchema.objects.create_property(
+        database=database, key="qty", name="数", type="text"
+    )
+    row = DatabaseRow.objects.create_row(database=database, values={"qty": "7"})
+    res = patch_json(
+        authenticated_client,
+        f"/api/databases/{database.id}/properties/{prop.id}/",
+        {"type": "number"},
+    )
+    assert _data(res)["property"]["type"] == "number"
+    row.refresh_from_db()
+    assert row.values["qty"] == 7  # text "7" → number 7 へ移行
+
+
+def test_update_property_type_change_with_rename(authenticated_client, database):
+    prop = PropertySchema.objects.create_property(
+        database=database, key="qty", name="数", type="text"
+    )
+    row = DatabaseRow.objects.create_row(database=database, values={"qty": "3"})
+    res = patch_json(
+        authenticated_client,
+        f"/api/databases/{database.id}/properties/{prop.id}/",
+        {"type": "number", "name": "数量"},
+    )
+    data = _data(res)["property"]
+    assert data["type"] == "number"
+    assert data["name"] == "数量"
+    row.refresh_from_db()
+    assert row.values["qty"] == 3
+
+
+def test_update_property_type_change_rejects_unknown(authenticated_client, database):
+    prop = PropertySchema.objects.create_property(
+        database=database, key="x", name="X", type="text"
+    )
+    res = patch_json(
+        authenticated_client,
+        f"/api/databases/{database.id}/properties/{prop.id}/",
+        {"type": "rating"},
+    )
+    assert res.status_code == 400
+
+
 # --- 行 ---------------------------------------------------------------------
 
 

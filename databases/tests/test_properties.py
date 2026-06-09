@@ -1,7 +1,12 @@
 """プロパティ型バリデーションの単体テスト(Django 非依存)。"""
 import pytest
 
-from databases.properties import PropertyType, empty_value, validate_value
+from databases.properties import (
+    PropertyType,
+    coerce_value,
+    empty_value,
+    validate_value,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -212,3 +217,70 @@ def test_empty_value_is_valid_for_every_type(ptype):
     # 空値は同じ型の検証を必ず通る(行作成時の既定として安全)
     empty = empty_value(ptype)
     assert validate_value(ptype, empty, SELECT_CONFIG) == empty
+
+
+# --- 型変更コアース --------------------------------------------------------
+
+
+def test_coerce_number_to_text():
+    assert coerce_value("text", 42) == "42"
+
+
+def test_coerce_text_to_number():
+    assert coerce_value("number", "3.5") == 3.5
+    assert coerce_value("number", "10") == 10
+
+
+def test_coerce_unparseable_text_to_number_is_empty():
+    assert coerce_value("number", "abc") is None
+
+
+def test_coerce_multi_select_to_text_joins():
+    assert coerce_value("text", ["a", "b"]) == "a, b"
+
+
+def test_coerce_select_to_multi_select():
+    assert coerce_value("multi_select", "Doing", SELECT_CONFIG) == ["Doing"]
+
+
+def test_coerce_multi_select_to_select_takes_first():
+    assert coerce_value("select", ["Done", "Todo"], SELECT_CONFIG) == "Done"
+
+
+def test_coerce_to_select_drops_unknown_option():
+    # 新しい選択肢に無い値は空へ落ちる(壊れた値を保存しない)
+    assert coerce_value("select", "Legacy", SELECT_CONFIG) is None
+
+
+def test_coerce_to_checkbox():
+    assert coerce_value("checkbox", "true") is True
+    assert coerce_value("checkbox", "") is False
+    assert coerce_value("checkbox", 1) is True
+
+
+def test_coerce_text_to_date_invalid_is_none():
+    assert coerce_value("date", "not a date") is None
+    assert coerce_value("date", "2026-06-09") == "2026-06-09"
+
+
+def test_coerce_bool_to_text():
+    assert coerce_value("text", True) == "true"
+
+
+def test_coerce_to_relation_from_non_list_is_empty():
+    assert coerce_value("relation", "x") == []
+
+
+def test_coerce_edge_candidates():
+    # _candidate の各分岐(空・型不一致)を網羅
+    assert coerce_value("text", None) == ""
+    assert coerce_value("number", True) is None  # bool は number にしない
+    assert coerce_value("number", 5) == 5  # 数値はそのまま
+    assert coerce_value("number", [1, 2]) is None  # list → 空
+    assert coerce_value("select", None, SELECT_CONFIG) is None
+    assert coerce_value("multi_select", ["Todo"], SELECT_CONFIG) == ["Todo"]  # list 維持
+    assert coerce_value("multi_select", None, SELECT_CONFIG) == []
+    assert coerce_value("checkbox", True) is True  # bool はそのまま
+    assert coerce_value("relation", ["12345678-1234-5678-1234-567812345678"]) == [
+        "12345678-1234-5678-1234-567812345678"
+    ]
