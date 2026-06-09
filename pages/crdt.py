@@ -23,6 +23,10 @@ from pycrdt import Doc, Text
 # ブロック本文を保持する root 型のキー。クライアント(Yjs)側と一致させる。
 TEXT_KEY = "text"
 
+# 1 ブロックのテキスト更新としてあり得ない巨大ペイロードを境界で弾く
+# (4-D で WS から信頼できないバイナリを受けるため、ドメイン層でも自衛する)。
+MAX_UPDATE_BYTES = 1 * 1024 * 1024  # 1 MiB
+
 
 class BlockDoc:
     """1 ブロックのテキストを表す CRDT ドキュメント。
@@ -52,8 +56,19 @@ class BlockDoc:
         return str(self._text)
 
     def apply_update(self, update: bytes) -> None:
-        """他 peer からのバイナリ更新をマージする(可換・冪等)。"""
-        self._doc.apply_update(update)
+        """他 peer からのバイナリ更新をマージする(可換・冪等)。
+
+        信頼境界。型・サイズを検証し、pycrdt(Rust コア)の内部例外は
+        ``ValueError`` に正規化して内部状態の詳細を WS 層へ漏らさない。
+        """
+        if not isinstance(update, bytes | bytearray):
+            raise TypeError(f"update must be bytes, got {type(update).__name__}")
+        if len(update) > MAX_UPDATE_BYTES:
+            raise ValueError(f"update too large: {len(update)} bytes")
+        try:
+            self._doc.apply_update(bytes(update))
+        except Exception as exc:  # pycrdt の不正ペイロード例外を正規化
+            raise ValueError("invalid CRDT update payload") from exc
 
     def state(self) -> bytes:
         """自身の state vector(どこまで観測済みか)。差分要求の起点に使う。"""
@@ -71,7 +86,9 @@ class BlockDoc:
     # --- ローカル編集(テスト・将来のサーバ側補正用)------------------------
 
     def insert(self, index: int, value: str) -> None:
+        """``index`` に ``value`` を挿入する(範囲外は pycrdt が ``IndexError``)。"""
         self._text.insert(index, value)
 
     def delete(self, index: int, length: int) -> None:
+        """``index`` から ``length`` 文字削除する(範囲外は pycrdt が ``IndexError``)。"""
         del self._text[index : index + length]

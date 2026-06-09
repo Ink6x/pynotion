@@ -92,6 +92,7 @@ def test_from_update_restores_full_state():
 
 
 def test_delete_replicates():
+    """削除も他 peer へ複製される。"""
     a = BlockDoc("hello world")
     b = _sync_new_peer(a)
 
@@ -99,6 +100,44 @@ def test_delete_replicates():
     a.delete(5, 6)  # " world" を削除
     b.apply_update(a.update_since(sv))
     assert a.text == b.text == "hello"
+
+
+def test_delete_races_with_concurrent_insert():
+    """削除と、削除範囲内への並行挿入が衝突しても両 peer は収束する。
+
+    CRDT の難所(削除済み位置への挿入)。Yjs の tombstone により、
+    挿入文字は残りつつ削除も適用され、両 peer が同一状態へ収束する。
+    """
+    a = BlockDoc("hello world")
+    b = _sync_new_peer(a)
+
+    sv_a, sv_b = a.state(), b.state()
+    a.delete(5, 6)        # " world" を削除
+    b.insert(8, "XYZ")    # 削除範囲 (" world") の内側へ挿入
+    a.apply_update(b.update_since(sv_b))
+    b.apply_update(a.update_since(sv_a))
+
+    assert a.text == b.text  # 収束(具体値ではなく一致を固定)
+
+
+def test_apply_update_rejects_non_bytes():
+    doc = BlockDoc()
+    with pytest.raises(TypeError):
+        doc.apply_update("not bytes")  # type: ignore[arg-type]
+
+
+def test_apply_update_rejects_oversized_payload():
+    from pages.crdt import MAX_UPDATE_BYTES
+
+    doc = BlockDoc()
+    with pytest.raises(ValueError, match="too large"):
+        doc.apply_update(b"\x00" * (MAX_UPDATE_BYTES + 1))
+
+
+def test_apply_update_normalizes_invalid_payload():
+    doc = BlockDoc()
+    with pytest.raises(ValueError, match="invalid CRDT update payload"):
+        doc.apply_update(b"\xff\xff\xff not a valid yjs update")
 
 
 def test_independent_seeding_diverges_documents_gotcha():
@@ -115,4 +154,7 @@ def test_independent_seeding_diverges_documents_gotcha():
     a.insert(3, "def")
     rogue.apply_update(a.update_since(sv))
 
-    assert rogue.text != "abcdef"  # 収束しない
+    # 収束しない。実際の発散値を固定し、pycrdt のマージ挙動が両方向に
+    # 変わったら検知できるようにする(負の表明だけだと偽合格を見逃す)。
+    assert rogue.text == "abcdefabc"
+    assert rogue.text != a.text
