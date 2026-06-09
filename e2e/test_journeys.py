@@ -228,7 +228,9 @@ def test_database_board_drag_card_between_lanes(app):
           });
           const dt = new DataTransfer();
           const fire = (el, type) =>
-            el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+            el.dispatchEvent(
+              new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt })
+            );
           fire(card, 'dragstart');
           fire(target, 'dragover');
           fire(target, 'drop');

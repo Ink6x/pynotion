@@ -289,7 +289,10 @@ const Databases = (() => {
       e.preventDefault();
       lane.classList.add("db-lane-over");
     });
-    lane.addEventListener("dragleave", () => lane.classList.remove("db-lane-over"));
+    lane.addEventListener("dragleave", (e) => {
+      // 子要素へ移っただけの dragleave では外さない(ハイライトのちらつき防止)
+      if (!lane.contains(e.relatedTarget)) lane.classList.remove("db-lane-over");
+    });
     lane.addEventListener("drop", (e) => onDropToLane(e, view, group.value, lane));
     return lane;
   }
@@ -335,9 +338,12 @@ const Databases = (() => {
       if (last && last.dataset.row !== rowId) {
         await API.moveRow(rowId, { after_id: last.dataset.row });
       }
-      await refresh();
     } catch (err) {
       App.toast(err.message || "移動に失敗しました");
+    } finally {
+      // 成否に関わらずサーバ状態へ再同期する(updateRow 成功・moveRow 失敗で
+      // UI が古いまま残るのを防ぐ)。
+      await refresh();
     }
   }
 

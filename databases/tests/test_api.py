@@ -192,6 +192,21 @@ def test_delete_row(authenticated_client, database, status_prop):
     assert not DatabaseRow.objects.filter(pk=row.id).exists()
 
 
+def test_move_row_viewer_forbidden(client, database, status_prop, other_user):
+    PageShare.objects.create(page=database.page, user=other_user, role=Role.VIEWER)
+    row = DatabaseRow.objects.create_row(database=database, values={})
+    client.force_login(other_user)
+    res = post_json(client, f"/api/databases/rows/{row.id}/move/", {})
+    assert res.status_code == 403
+
+
+def test_move_row_non_member_404(client, database, status_prop, other_user):
+    row = DatabaseRow.objects.create_row(database=database, values={})
+    client.force_login(other_user)
+    res = post_json(client, f"/api/databases/rows/{row.id}/move/", {})
+    assert res.status_code == 404  # 存在を漏らさない
+
+
 # --- ビュー(table / board)-------------------------------------------------
 
 
