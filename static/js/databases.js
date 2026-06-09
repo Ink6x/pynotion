@@ -8,6 +8,9 @@ const Databases = (() => {
   /** @type {{id:string, properties:Array, views:Array} | null} */
   let db = null;
   let container = null;
+  // 描画世代トークン。ページを素早く切り替えたとき、古い render の await が
+  // 後から完了して新しいテーブルを壊さないように使う。
+  let renderToken = 0;
 
   const TYPE_LABELS = {
     text: "テキスト",
@@ -25,21 +28,27 @@ const Databases = (() => {
    * @param {string} databaseId
    */
   async function render(el, databaseId) {
+    const token = ++renderToken;
     container = el;
     container.classList.remove("hidden");
     container.innerHTML = "";
     try {
       const data = await API.getDatabase(databaseId);
+      if (token !== renderToken) return; // 別ページへ切り替わった
       db = data.database;
       const view = await ensureTableView();
+      if (token !== renderToken) return;
       const rows = (await API.viewRows(view.id)).rows || [];
+      if (token !== renderToken) return;
       container.appendChild(buildTable(rows));
     } catch (err) {
+      if (token !== renderToken) return;
       container.textContent = "データベースを読み込めませんでした";
     }
   }
 
   function hide() {
+    renderToken++; // 進行中の render を無効化する
     if (container) {
       container.classList.add("hidden");
       container.innerHTML = "";
@@ -52,7 +61,8 @@ const Databases = (() => {
     const existing = (db.views || []).find((v) => v.type === "table");
     if (existing) return existing;
     const data = await API.createView(db.id, { type: "table", name: "テーブル" });
-    db.views.push(data.view);
+    // 破壊変更を避け、新しい db オブジェクトへ差し替える(immutable)。
+    db = { ...db, views: [...(db.views || []), data.view] };
     return data.view;
   }
 
@@ -279,9 +289,10 @@ const Databases = (() => {
     });
 
     pop.append(nameInput, typeSel, optsInput, add);
+    // getBoundingClientRect はビューポート基準なので、絶対配置のためスクロール量を足す。
     const rect = anchor.getBoundingClientRect();
-    pop.style.left = rect.left + "px";
-    pop.style.top = rect.bottom + 6 + "px";
+    pop.style.left = rect.left + window.scrollX + "px";
+    pop.style.top = rect.bottom + window.scrollY + 6 + "px";
     document.getElementById("modal-root").appendChild(pop);
     nameInput.focus();
     setTimeout(() => document.addEventListener("click", outside, { once: true }), 0);
