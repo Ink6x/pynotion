@@ -111,6 +111,55 @@ def test_view_str(database):
     assert "board" in str(view)
 
 
+def test_group_rows_by_select_with_dict_options(user):
+    from databases.query import group_rows
+
+    page = Page.objects.create_page(owner=user)
+    db = Database.objects.create(page=page)
+    PropertySchema.objects.create_property(
+        database=db,
+        key="prio",
+        name="優先度",
+        type="select",
+        config={"options": [{"name": "Low"}, {"name": "High"}]},  # dict 形式の options
+    )
+    DatabaseRow.objects.create_row(database=db, values={"prio": "High"})
+    DatabaseRow.objects.create_row(database=db, values={})  # 未設定
+    view = DatabaseView.objects.create(database=db, type=ViewType.BOARD, group_by="prio")
+    groups = {g["value"]: len(g["rows"]) for g in group_rows(view, list(db.rows.all()))}
+    assert groups == {"Low": 0, "High": 1, None: 1}
+
+
+def test_group_rows_by_multi_select(user):
+    from databases.query import group_rows
+
+    page = Page.objects.create_page(owner=user)
+    db = Database.objects.create(page=page)
+    PropertySchema.objects.create_property(
+        database=db,
+        key="tags",
+        name="タグ",
+        type="multi_select",
+        config={"options": ["a", "b", "c"]},
+    )
+    DatabaseRow.objects.create_row(database=db, values={"tags": ["a", "b"]})
+    DatabaseRow.objects.create_row(database=db, values={"tags": []})  # 未設定
+    view = DatabaseView.objects.create(database=db, type=ViewType.BOARD, group_by="tags")
+    groups = {g["value"]: len(g["rows"]) for g in group_rows(view, list(db.rows.all()))}
+    # 1 行が a と b の両グループに属し、空配列は未設定へ
+    assert groups["a"] == 1
+    assert groups["b"] == 1
+    assert groups[None] == 1
+
+
+def test_group_rows_invalid_group_by_rejected(database):
+    from databases.query import group_rows
+
+    view = DatabaseView.objects.create(database=database, type=ViewType.BOARD, group_by="")
+    with pytest.raises(ValueError, match="group_by"):
+        group_rows(view, [])
+
+
 def test_and_combination(database, rows):
     q = build_filter_q(
         database,

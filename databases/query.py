@@ -202,3 +202,57 @@ def rows_for_view(view) -> list:
     q = build_filter_q(database, view.filters)
     order = build_order_by(database, view.sorts)
     return list(database.rows.filter(q).order_by(*order))
+
+
+def _option_names(prop) -> list[str]:
+    names: list[str] = []
+    for opt in (prop.config or {}).get("options", []):
+        if isinstance(opt, str):
+            names.append(opt)
+        elif isinstance(opt, dict) and isinstance(opt.get("name"), str):
+            names.append(opt["name"])
+    return names
+
+
+def group_rows(view, rows: list) -> list[dict]:
+    """ボードビュー用に ``group_by`` プロパティで行をグループ化する。
+
+    返り値: ``[{"value": <グループ値 or None>, "rows": [DatabaseRow, ...]}, ...]``
+    - select は config の options 順に空グループも並べる(空のレーンも出す)
+    - multi_select は 1 行が複数グループに属しうる
+    - 未設定(None / 空)は ``value=None`` のグループへ
+    """
+    database = view.database
+    key = view.group_by
+    schema = database.schema_map()
+    if not key or key not in schema:
+        raise ValueError("group_by に有効なプロパティを指定してください")
+    prop = schema[key]
+
+    groups: dict = {}
+    order: list = []
+
+    def ensure(value) -> None:
+        if value not in groups:
+            groups[value] = []
+            order.append(value)
+
+    if prop.type == "select":
+        for name in _option_names(prop):
+            ensure(name)
+    ensure(None)  # 未設定レーン
+
+    for row in rows:
+        value = row.values.get(key)
+        if isinstance(value, list):  # multi_select
+            if not value:
+                groups[None].append(row)
+            for member in value:
+                ensure(member)
+                groups[member].append(row)
+        else:
+            bucket = value if value not in ("", None) else None
+            ensure(bucket)
+            groups[bucket].append(row)
+
+    return [{"value": value, "rows": groups[value]} for value in order]
