@@ -154,7 +154,11 @@ def test_independent_seeding_diverges_documents_gotcha():
     a.insert(3, "def")
     rogue.apply_update(a.update_since(sv))
 
-    # 収束しない。実際の発散値を固定し、pycrdt のマージ挙動が両方向に
-    # 変わったら検知できるようにする(負の表明だけだと偽合格を見逃す)。
-    assert rogue.text == "abcdefabc"
+    # 収束しない。ただし発散後の「文字の並び」は両 doc の乱数 client id の
+    # 大小で決まり非決定的(CI で 'abcabcdef'、ローカルで 'abcdefabc')。
+    # そこで順序に依存しない不変量で発散を固定する:
+    #  - 権威 doc へ収束していない
+    #  - 双方の列がそのまま併存している(rogue の 'abc' + 権威の 'abcdef' = 9 文字)
     assert rogue.text != a.text
+    assert len(rogue.text) == 9
+    assert sorted(rogue.text) == sorted("abc" + "abcdef")
