@@ -48,7 +48,7 @@ packages = []
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.dev"
 python_files = ["test_*.py"]
-testpaths = ["pages/tests", "config/tests", "accounts/tests"]
+testpaths = ["pages/tests", "config/tests", "accounts/tests", "databases/tests"]
 markers = [
     "unit: 単体テスト",
     "integration: 統合テスト",
