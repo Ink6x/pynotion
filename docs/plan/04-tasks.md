@@ -141,9 +141,12 @@
       同期パスは RQ/Redis を import しない)(4-C-1)
 - [x] Markdown エクスポート(`exports/markdown.py`、ブロックツリー → md。見出し/ToDo/
       リスト/番号/引用/コード/トグル/区切り、ネスト・連番対応)(4-C-1)
-- [ ] PDF エクスポート(WeasyPrint)+ 進捗通知(Channels で push)(4-C-2、ネイティブ依存)
-- [ ] Webhook 登録 + HMAC 署名付き配信(4-C-2)
-- [ ] 指数バックオフ・リトライ・冪等性(4-C-2)
+- [x] Webhook 登録 + HMAC 署名付き配信(4-C-2、`exports/webhooks.py`。HMAC-SHA256 署名、
+      full_access のみ登録、SSRF 対策の URL 検証、ping テスト配信)
+- [x] 指数バックオフ・リトライ・冪等性(4-C-2、`(webhook, event_id)` 一意制約で冪等、
+      指数バックオフで max_attempts リトライ。配信エンジンを単体テストで固定)
+- [ ] PDF エクスポート(WeasyPrint)+ 進捗通知 — ネイティブ依存(Docker/CI への影響)を
+      避けるため後回し。ページ更新イベントでの Webhook 自動発火も将来の磨き込み
 
 ### 4-D. 文字単位の競合解決(CRDT / C-3b)— 4-A が go の場合のみ
 

@@ -7,3 +7,8 @@ from ninja import Schema
 class ExportCreateIn(Schema):
     page_id: uuid.UUID
     format: str = "markdown"
+
+
+class WebhookCreateIn(Schema):
+    page_id: uuid.UUID
+    url: str
