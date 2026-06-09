@@ -73,6 +73,18 @@ def test_get_database_hidden_from_non_member(client, database, other_user):
     assert res.status_code == 404  # 存在を漏らさない
 
 
+def test_page_detail_exposes_database_id(authenticated_client, database, page):
+    # フロントが table/board を出すため、ページ詳細に database_id を載せる
+    res = authenticated_client.get(f"/api/pages/{page.id}/")
+    assert _data(res)["database_id"] == str(database.id)
+
+
+def test_page_detail_database_id_null_for_plain_page(authenticated_client, user):
+    plain = Page.objects.create_page(owner=user, title="ただのページ")
+    res = authenticated_client.get(f"/api/pages/{plain.id}/")
+    assert _data(res)["database_id"] is None
+
+
 # --- プロパティ -------------------------------------------------------------
 
 
