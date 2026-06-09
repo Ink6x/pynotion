@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "channels",
     "accounts",
     "pages",
+    "databases",
 ]
 
 

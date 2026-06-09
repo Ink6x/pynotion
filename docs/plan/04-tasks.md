@@ -118,14 +118,16 @@
 
 ### 4-B. データベースビュー(D)
 
-- [ ] `databases/` アプリ作成
-- [ ] `Database` / `DatabaseRow` / `PropertySchema` モデル
-- [ ] JSONB プロパティ値 + GinIndex
-- [ ] 型ごとのバリデーション(text / number / select / multi_select / date / checkbox / relation)
-- [ ] `DatabaseView`(filters / sorts / group_by)— 宣言的 JSON → `Q` 動的変換(演算子ホワイトリスト、SQL インジェクション防止テスト先行)
-- [ ] table view UI
-- [ ] board view UI(グループ間 DnD — fractional indexing 再利用)
-- [ ] プロパティ型変更時の値マイグレーション
+- [x] `databases/` アプリ作成(4-B-1)
+- [x] `Database` / `DatabaseRow` / `PropertySchema` モデル(Database は Page に委譲し
+      RBAC を再利用、行値は JSONB、並び順は fractional indexing 再利用)
+- [x] JSONB プロパティ値 + GinIndex(Postgres 限定マイグレーションの vendor ガード)
+- [x] 型ごとのバリデーション(text / number / select / multi_select / date / checkbox / relation、
+      `databases/properties.py` 純ドメイン層 + 正規化)
+- [ ] `DatabaseView`(filters / sorts / group_by)— 宣言的 JSON → `Q` 動的変換(演算子ホワイトリスト、SQL インジェクション防止テスト先行)(4-B-2)
+- [ ] table view UI(4-B-4)
+- [ ] board view UI(グループ間 DnD — fractional indexing 再利用)(4-B-5)
+- [ ] プロパティ型変更時の値マイグレーション(4-B-6)
 
 ### 4-C. 非同期エクスポート / Webhook(G)
 
