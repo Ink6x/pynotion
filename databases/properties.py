@@ -40,11 +40,17 @@ def _option_names(config: dict) -> list[str]:
     return names
 
 
+# 1 セルのテキスト上限。巨大文字列によるストレージ肥大・配信負荷を境界で防ぐ。
+TEXT_MAX_LEN = 100_000
+
+
 def _validate_text(value, config: dict) -> str:
     if value is None:
         return ""
     if not isinstance(value, str):
         raise ValueError("text は文字列で指定してください")
+    if len(value) > TEXT_MAX_LEN:
+        raise ValueError(f"text は {TEXT_MAX_LEN} 文字以内で指定してください")
     return value
 
 

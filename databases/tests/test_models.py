@@ -43,6 +43,15 @@ def test_create_property_rejects_unknown_type(database):
         PropertySchema.objects.create_property(database=database, name="x", type="rating")
 
 
+@pytest.mark.parametrize("reserved", ["isnull", "iregex", "icontains", "gt", "in"])
+def test_create_property_rejects_reserved_key(database, reserved):
+    # Django ルックアップ名を key にすると values__<key> がトランスフォームに化ける
+    with pytest.raises(ValueError, match="予約語"):
+        PropertySchema.objects.create_property(
+            database=database, key=reserved, name="x", type="text"
+        )
+
+
 def test_property_key_unique_per_database(database):
     PropertySchema.objects.create_property(
         database=database, key="status", name="A", type="text"

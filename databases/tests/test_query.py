@@ -12,7 +12,12 @@ from databases.models import (
     PropertySchema,
     ViewType,
 )
-from databases.query import build_filter_q, build_order_by, rows_for_view
+from databases.query import (
+    build_filter_q,
+    build_order_by,
+    rows_for_view,
+    validate_view_spec,
+)
 from pages.models import Page
 
 pytestmark = pytest.mark.django_db
@@ -210,6 +215,32 @@ def test_is_empty_and_not_empty(database):
     assert database.rows.filter(not_empty).count() == 1
 
 
+def test_is_empty_is_type_aware_for_checkbox(database):
+    # checkbox の空値は False。is_empty が未チェック行を正しく拾う(型認識)。
+    DatabaseRow.objects.create_row(database=database, values={"done": False})
+    DatabaseRow.objects.create_row(database=database, values={"done": True})
+    empty = build_filter_q(database, {"property": "done", "op": "is_empty"})
+    not_empty = build_filter_q(database, {"property": "done", "op": "is_not_empty"})
+    assert database.rows.filter(empty).count() == 1
+    assert database.rows.filter(not_empty).count() == 1
+
+
+def test_deeply_nested_filter_rejected(database):
+    # {"not": {"not": ...}} を深くネストしても RecursionError ではなく ValueError
+    spec = {"property": "age", "op": "eq", "value": 1}
+    for _ in range(40):
+        spec = {"not": spec}
+    with pytest.raises(ValueError, match="深すぎます"):
+        build_filter_q(database, spec)
+
+
+def test_in_rejects_non_scalar_elements(database):
+    with pytest.raises(ValueError, match="スカラ"):
+        build_filter_q(
+            database, {"property": "status", "op": "in", "value": [{"evil": 1}]}
+        )
+
+
 # --- ソート -----------------------------------------------------------------
 
 
@@ -228,6 +259,30 @@ def test_order_by_desc(database, rows):
 def test_order_by_defaults_to_position(database):
     assert build_order_by(database, []) == ["position"]
     assert build_order_by(database, None) == ["position"]
+
+
+def test_validate_view_spec_accepts_valid(database):
+    validate_view_spec(
+        database,
+        filters={"property": "status", "op": "eq", "value": "Done"},
+        sorts=[{"property": "age", "direction": "asc"}],
+        group_by="status",
+    )  # 例外が出なければ OK
+
+
+def test_validate_view_spec_rejects_bad_filter(database):
+    with pytest.raises(ValueError, match="未知のプロパティ"):
+        validate_view_spec(
+            database,
+            filters={"property": "ghost", "op": "eq", "value": 1},
+            sorts=[],
+            group_by="",
+        )
+
+
+def test_validate_view_spec_rejects_unknown_group_by(database):
+    with pytest.raises(ValueError, match="group_by"):
+        validate_view_spec(database, filters={}, sorts=[], group_by="ghost")
 
 
 def test_rows_for_view_applies_filter_and_sort(database, rows):

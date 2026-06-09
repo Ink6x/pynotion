@@ -32,6 +32,21 @@ PROPERTY_TYPE_CHOICES = [(t.value, t.value) for t in PropertyType]
 # これで動的フィルタ構築時に意図しないトランスフォーム注入が起きない。
 _KEY_RE = re.compile(r"^[a-zA-Z0-9]+(?:_[a-zA-Z0-9]+)*$")
 
+# 単語 1 つの Django / JSONField ルックアップ・トランスフォーム名。これらを key に
+# すると ``values__<key>`` が「列の値」ではなくトランスフォーム(例: ``values__isnull``
+# = 値全体が NULL か、``values__iregex`` = 値全体への正規表現)として解釈されてしまう。
+# `__` を含まないため _KEY_RE は通ってしまうので、明示的に拒否する(多層防御)。
+_RESERVED_KEYS = frozenset(
+    {
+        "exact", "iexact", "contains", "icontains", "startswith", "istartswith",
+        "endswith", "iendswith", "regex", "iregex", "gt", "gte", "lt", "lte",
+        "in", "range", "isnull", "date", "year", "iso_year", "month", "day",
+        "week", "week_day", "iso_week_day", "quarter", "time", "hour", "minute",
+        "second", "overlap", "contained_by", "has_key", "has_keys",
+        "has_any_keys", "len", "values", "keys",
+    }
+)
+
 
 def validate_property_key(key: str) -> str:
     if not isinstance(key, str) or not _KEY_RE.match(key):
@@ -39,6 +54,8 @@ def validate_property_key(key: str) -> str:
             "プロパティ key は英数字とアンダースコアのみ("
             "先頭末尾は英数字、`__` 不可)で指定してください"
         )
+    if key in _RESERVED_KEYS:
+        raise ValueError(f"プロパティ key に予約語は使用できません: {key!r}")
     return key
 
 

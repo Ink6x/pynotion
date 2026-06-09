@@ -198,14 +198,37 @@ def test_board_view_groups_by_select(authenticated_client, database, status_prop
     assert None in groups
 
 
-def test_view_rows_rejects_invalid_filter(authenticated_client, database, status_prop):
+def test_create_view_rejects_invalid_filter_at_write_time(
+    authenticated_client, database, status_prop
+):
+    # 壊れたフィルタは保存時点で 400(stored-bomb を防ぐ)
     res = post_json(
         authenticated_client,
         f"/api/databases/{database.id}/views/",
         {"type": "table", "filters": {"property": "ghost", "op": "eq", "value": 1}},
     )
+    assert res.status_code == 400
+
+
+def test_create_board_rejects_unknown_group_by(authenticated_client, database, status_prop):
+    res = post_json(
+        authenticated_client,
+        f"/api/databases/{database.id}/views/",
+        {"type": "board", "group_by": "ghost"},
+    )
+    assert res.status_code == 400
+
+
+def test_update_view_rejects_invalid_filter(authenticated_client, database, status_prop):
+    res = post_json(
+        authenticated_client, f"/api/databases/{database.id}/views/", {"name": "A"}
+    )
     view_id = _data(res)["view"]["id"]
-    res = authenticated_client.get(f"/api/databases/views/{view_id}/rows/")
+    res = patch_json(
+        authenticated_client,
+        f"/api/databases/views/{view_id}/",
+        {"filters": {"property": "ghost", "op": "eq", "value": 1}},
+    )
     assert res.status_code == 400
 
 

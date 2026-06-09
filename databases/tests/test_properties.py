@@ -25,6 +25,13 @@ def test_text_rejects_non_string():
         validate_value("text", 123)
 
 
+def test_text_rejects_oversized():
+    from databases.properties import TEXT_MAX_LEN
+
+    with pytest.raises(ValueError, match="文字以内"):
+        validate_value("text", "x" * (TEXT_MAX_LEN + 1))
+
+
 # --- number -----------------------------------------------------------------
 
 

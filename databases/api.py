@@ -22,7 +22,7 @@ from .models import (
     ViewType,
     normalize_row_values,
 )
-from .query import group_rows, rows_for_view
+from .query import group_rows, rows_for_view, validate_view_spec
 from .schemas import (
     DatabaseCreateIn,
     PropertyCreateIn,
@@ -48,6 +48,7 @@ router = Router(tags=["databases"])
 def _get_database(database_id: uuid.UUID, user, min_role: Role) -> Database:
     database = (
         Database.objects.select_related("page")
+        .prefetch_related("properties", "views")
         .filter(pk=database_id, page__is_deleted=False)
         .first()
     )
@@ -160,6 +161,8 @@ def delete_property(request, database_id: uuid.UUID, property_id: uuid.UUID):
     _enforce_write_ratelimit(request)
     database = _get_database(database_id, request.user, Role.EDITOR)
     prop = _get_property(database, property_id)
+    # TODO(4-B-6): 既存行の values に残る当該 key は次回 update_row の正規化で
+    # 落ちるまで残存する。型変更マイグレーションと併せて一括クリーンアップする。
     prop.delete()
     return {"deleted": True}
 
@@ -214,10 +217,16 @@ def _validate_view_type(value: str) -> str:
 def create_view(request, database_id: uuid.UUID, payload: ViewCreateIn):
     _enforce_write_ratelimit(request)
     database = _get_database(database_id, request.user, Role.EDITOR)
+    view_type = _validate_view_type(payload.type)
+    # 宣言的 JSON を保存前に検証する(壊れたビューの保存 = 閲覧者の GET が
+    # 毎回失敗する stored-bomb を防ぐ)。
+    validate_view_spec(
+        database, filters=payload.filters, sorts=payload.sorts, group_by=payload.group_by
+    )
     view = DatabaseView.objects.create(
         database=database,
         name=payload.name,
-        type=_validate_view_type(payload.type),
+        type=view_type,
         filters=payload.filters,
         sorts=payload.sorts,
         group_by=payload.group_by,
@@ -246,6 +255,10 @@ def update_view(request, view_id: uuid.UUID, payload: ViewUpdateIn):
     if "group_by" in fields and payload.group_by is not None:
         view.group_by = payload.group_by
         update_fields.append("group_by")
+    # 変更後の最終状態を保存前に検証する(stored-bomb 防止)。
+    validate_view_spec(
+        view.database, filters=view.filters, sorts=view.sorts, group_by=view.group_by
+    )
     view.save(update_fields=update_fields)
     return {"view": serialize_view(view)}
 
