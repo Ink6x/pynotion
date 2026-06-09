@@ -129,7 +129,8 @@
       行 / ビュー CRUD、ビュー実行 = table 行列・board グループ化)(4-B-3)
 - [x] table view UI(4-B-4、`static/js/databases.js`。ページのデータベース化・列/行追加・
       型別セル編集・永続化。ページ詳細 API に `database_id` を追加。E2E 1 本)
-- [ ] board view UI(グループ間 DnD — fractional indexing 再利用)(4-B-5)
+- [x] board view UI(4-B-5、ビュー切替 + レーン描画 + グループ間 DnD。カードのグループ値
+      更新 + 行 move エンドポイントで fractional indexing を再利用。E2E 1 本)
 - [ ] プロパティ型変更時の値マイグレーション(4-B-6)
 
 ### 4-C. 非同期エクスポート / Webhook(G)

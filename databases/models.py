@@ -162,6 +162,28 @@ class DatabaseRowManager(models.Manager):
         normalized = normalize_row_values(database, values or {})
         return self.create(database=database, values=normalized, position=position)
 
+    def move(self, row: "DatabaseRow", *, after: "DatabaseRow | None") -> None:
+        """行を after の直後 (None なら先頭) へ移動する。
+
+        並び順は fractional indexing を再利用し、他行を更新せず position だけ採り直す
+        (ボードのグループ間 DnD で使う)。``after`` は同じデータベースの行であること。
+        """
+        if after is not None and after.database_id != row.database_id:
+            raise ValueError("after は同じデータベースの行を指定してください")
+        siblings = (
+            self.filter(database_id=row.database_id)
+            .exclude(pk=row.pk)
+            .order_by("position")
+        )
+        if after is None:
+            first = siblings.first()
+            position = key_between(None, first.position if first else None)
+        else:
+            following = siblings.filter(position__gt=after.position).first()
+            position = key_between(after.position, following.position if following else None)
+        row.position = position
+        row.save(update_fields=["position", "updated_at"])
+
 
 class DatabaseRow(models.Model):
     """データベースの 1 行。値は JSONB に key → 値 で保持する。"""

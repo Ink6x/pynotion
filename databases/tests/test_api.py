@@ -161,11 +161,50 @@ def test_update_row_merges_partial(authenticated_client, database, status_prop):
     assert values == {"status": "Done", "title": "設計"}  # title は保持
 
 
+def test_move_row_reorders(authenticated_client, database, status_prop):
+    r1 = DatabaseRow.objects.create_row(database=database, values={"status": "Todo"})
+    r2 = DatabaseRow.objects.create_row(database=database, values={"status": "Doing"})
+    # r1 を r2 の直後へ
+    res = post_json(
+        authenticated_client,
+        f"/api/databases/rows/{r1.id}/move/",
+        {"after_id": str(r2.id)},
+    )
+    assert res.status_code == 200
+    order = list(DatabaseRow.objects.filter(database=database).values_list("id", flat=True))
+    assert order == [r2.id, r1.id]
+
+
+def test_move_row_bad_after_400(authenticated_client, database, status_prop):
+    row = DatabaseRow.objects.create_row(database=database, values={})
+    res = post_json(
+        authenticated_client,
+        f"/api/databases/rows/{row.id}/move/",
+        {"after_id": "00000000-0000-0000-0000-000000000000"},
+    )
+    assert res.status_code == 400
+
+
 def test_delete_row(authenticated_client, database, status_prop):
     row = DatabaseRow.objects.create_row(database=database, values={"status": "Todo"})
     res = authenticated_client.delete(f"/api/databases/rows/{row.id}/")
     assert res.status_code == 200
     assert not DatabaseRow.objects.filter(pk=row.id).exists()
+
+
+def test_move_row_viewer_forbidden(client, database, status_prop, other_user):
+    PageShare.objects.create(page=database.page, user=other_user, role=Role.VIEWER)
+    row = DatabaseRow.objects.create_row(database=database, values={})
+    client.force_login(other_user)
+    res = post_json(client, f"/api/databases/rows/{row.id}/move/", {})
+    assert res.status_code == 403
+
+
+def test_move_row_non_member_404(client, database, status_prop, other_user):
+    row = DatabaseRow.objects.create_row(database=database, values={})
+    client.force_login(other_user)
+    res = post_json(client, f"/api/databases/rows/{row.id}/move/", {})
+    assert res.status_code == 404  # 存在を漏らさない
 
 
 # --- ビュー(table / board)-------------------------------------------------

@@ -28,6 +28,7 @@ from .schemas import (
     PropertyCreateIn,
     PropertyUpdateIn,
     RowCreateIn,
+    RowMoveIn,
     RowUpdateIn,
     ViewCreateIn,
     ViewUpdateIn,
@@ -193,6 +194,24 @@ def update_row(request, row_id: uuid.UUID, payload: RowUpdateIn):
     merged = {**row.values, **payload.values}
     row.values = normalize_row_values(row.database, merged)
     row.save(update_fields=["values", "updated_at"])
+    return {"row": serialize_row(row)}
+
+
+@router.post("/rows/{uuid:row_id}/move/")
+def move_row(request, row_id: uuid.UUID, payload: RowMoveIn):
+    """行を並べ替える(ボードのグループ間 DnD で使う)。
+
+    グループ(group_by プロパティ値)の変更は ``update_row`` で行い、レーン内の
+    位置はこの move で采る。両者を組み合わせてカードをレーン間移動する。
+    """
+    _enforce_write_ratelimit(request)
+    row = _get_row(row_id, request.user, Role.EDITOR)
+    after = None
+    if payload.after_id is not None:
+        after = row.database.rows.filter(pk=payload.after_id).first()
+        if after is None:
+            raise ValueError("after_id の行が見つかりません")
+    DatabaseRow.objects.move(row, after=after)
     return {"row": serialize_row(row)}
 
 

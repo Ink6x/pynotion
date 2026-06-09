@@ -88,6 +88,7 @@ const API = (() => {
       request("DELETE", `/api/databases/${dbId}/properties/${propId}/`),
     createRow: (dbId, payload) => request("POST", `/api/databases/${dbId}/rows/`, payload || {}),
     updateRow: (rowId, payload) => request("PATCH", `/api/databases/rows/${rowId}/`, payload),
+    moveRow: (rowId, payload) => request("POST", `/api/databases/rows/${rowId}/move/`, payload || {}),
     deleteRow: (rowId) => request("DELETE", `/api/databases/rows/${rowId}/`),
     createView: (dbId, payload) => request("POST", `/api/databases/${dbId}/views/`, payload || {}),
     updateView: (viewId, payload) =>

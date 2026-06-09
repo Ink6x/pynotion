@@ -186,6 +186,68 @@ def test_database_table_add_column_row_and_edit(app):
     expect(app.locator(".db-row .db-input").first).to_have_value("設計タスク")
 
 
+def test_database_board_drag_card_between_lanes(app):
+    """ボードビューでカードをレーン間ドラッグするとグループ値が変わり永続化される。"""
+    create_page_with_first_block(app)
+    app.click("#database-button")
+    app.wait_for_selector(".db-table")
+
+    # select 列「状態」(Todo / Done) を追加
+    app.click(".db-add-col")
+    cpop = app.locator(".db-add-col-pop")
+    cpop.locator(".db-col-name-input").fill("状態")
+    cpop.locator(".db-col-type-input").select_option("select")
+    cpop.locator(".db-col-options-input").fill("Todo, Done")
+    cpop.locator(".db-col-create").click()
+    expect(app.locator(".db-col-name", has_text="状態")).to_have_count(1)
+
+    # 行を 1 つ追加 (状態は未設定)
+    app.click(".db-add-row")
+    expect(app.locator(".db-row")).to_have_count(1)
+
+    # ボードビューを追加 (group_by=状態)
+    app.click(".db-add-view")
+    vpop = app.locator(".db-add-view-pop")
+    vpop.locator(".db-view-type-input").select_option("board")
+    vpop.locator(".db-view-group-input").select_option(label="状態")
+    vpop.locator(".db-view-create").click()
+
+    # ボードが描画され、Todo / Done / 未設定 の 3 レーンが出る
+    app.wait_for_selector(".db-board")
+    expect(app.locator(".db-lane")).to_have_count(3)
+    # カードは未設定レーンに 1 枚
+    expect(app.locator(".db-lane-header", has_text="未設定 (1)")).to_be_visible()
+
+    # 未設定のカードを Todo レーンへ DnD (合成イベント)
+    app.evaluate(
+        """() => {
+          const card = document.querySelector('.db-lane .db-card');
+          let target = null;
+          document.querySelectorAll('.db-lane').forEach((l) => {
+            if (l.querySelector('.db-lane-header').textContent.startsWith('Todo')) target = l;
+          });
+          const dt = new DataTransfer();
+          const fire = (el, type) =>
+            el.dispatchEvent(
+              new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt })
+            );
+          fire(card, 'dragstart');
+          fire(target, 'dragover');
+          fire(target, 'drop');
+        }"""
+    )
+
+    # Todo レーンが 1 枚、未設定が 0 枚になる (グループ値が更新された)
+    expect(app.locator(".db-lane-header", has_text="Todo (1)")).to_be_visible()
+    expect(app.locator(".db-lane-header", has_text="未設定 (0)")).to_be_visible()
+
+    # リロードして永続化を確認。リロード後は既定ビュー(テーブル)が出るので、
+    # 状態セルが Todo になっていること = DnD のグループ変更が保存されたこと。
+    app.reload()
+    app.wait_for_selector(".db-table")
+    expect(app.locator(".db-row .db-select")).to_have_value("Todo")
+
+
 def test_search_then_trash_and_restore(app):
     """検索でページを開き、ゴミ箱へ移動して復元する。"""
     create_page_with_first_block(app)

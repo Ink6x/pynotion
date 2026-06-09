@@ -112,6 +112,31 @@ def test_create_row_after_inserts_between(database, status_prop):
     assert rows == [r1, r2, r3]
 
 
+def test_move_row_reorders_via_fractional_index(database, status_prop):
+    r1 = DatabaseRow.objects.create_row(database=database, values={"status": "Todo"})
+    r2 = DatabaseRow.objects.create_row(database=database, values={"status": "Doing"})
+    r3 = DatabaseRow.objects.create_row(database=database, values={"status": "Done"})
+    # r3 を先頭へ
+    DatabaseRow.objects.move(r3, after=None)
+    order = list(DatabaseRow.objects.filter(database=database).values_list("id", flat=True))
+    assert order == [r3.id, r1.id, r2.id]
+    # r1 を r2 の直後へ
+    DatabaseRow.objects.move(r1, after=r2)
+    order = list(DatabaseRow.objects.filter(database=database).values_list("id", flat=True))
+    assert order == [r3.id, r2.id, r1.id]
+
+
+def test_move_row_rejects_after_from_other_database(user, database, status_prop):
+    other_db = Database.objects.create(page=Page.objects.create_page(owner=user))
+    PropertySchema.objects.create_property(
+        database=other_db, key="status", name="S", type="text"
+    )
+    here = DatabaseRow.objects.create_row(database=database, values={})
+    there = DatabaseRow.objects.create_row(database=other_db, values={})
+    with pytest.raises(ValueError, match="同じデータベース"):
+        DatabaseRow.objects.move(here, after=there)
+
+
 def test_normalize_row_values_rejects_non_dict(database):
     with pytest.raises(ValueError, match="オブジェクト"):
         normalize_row_values(database, ["not", "a", "dict"])
