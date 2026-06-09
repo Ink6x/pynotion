@@ -65,6 +65,21 @@ class TestCrdtStore:
         # もう一度 flush しても変化なし(同じテキスト)→ False
         assert crdt_store.flush(block.id) is False
 
+    def test_sync_with_no_client_state_returns_full(self, user):
+        page = Page.objects.create_page(owner=user)
+        block = page.blocks.first()
+        # state なし(None)でも例外を出さず全状態を返す
+        client = BlockDoc()
+        client.apply_update(base64.b64decode(crdt_store.sync_update(block.id, "全文", None)))
+        assert client.text == "全文"
+
+    def test_apply_ignores_malformed_base64(self, user):
+        page = Page.objects.create_page(owner=user)
+        block = page.blocks.first()
+        # 不正な base64 はデコード失敗 → 現在テキストを返し例外を出さない
+        text = crdt_store.apply_update(block.id, "seed", "not valid base64!!!")
+        assert text == "seed"
+
     def test_flush_missing_state_is_noop(self, user):
         page = Page.objects.create_page(owner=user)
         block = page.blocks.first()
@@ -224,6 +239,43 @@ class TestCrdtCollaboration:
         await v.send_json_to({"type": "crdt_update", "block_id": block_id, "update": up_v})
         assert await v.receive_nothing(timeout=0.3) is True
         await v.disconnect()
+
+    async def test_commenter_cannot_update(self):
+        # REST はテキスト編集に editor を要求する。WS でも commenter は弾く
+        # (`!= viewer` だと commenter が編集できて境界を迂回するため)。
+        owner = await _make_user("crdt_owner5")
+        commenter = await _make_user("crdt_commenter5")
+        page = await _make_page(owner)
+        await _share(page, commenter, Role.COMMENTER)
+        block_id = await _first_block_id(page)
+
+        c = await _connect(commenter, page.id, client_id="c")
+        pc = _Peer()
+        await _sync(c, pc, block_id)  # sync(読み取り)はできる
+        up = pc.edit_b64(lambda d: d.insert(0, "x"))
+        await c.send_json_to({"type": "crdt_update", "block_id": block_id, "update": up})
+        assert await c.receive_nothing(timeout=0.3) is True  # 編集は無視
+        await c.disconnect()
+
+    async def test_malformed_messages_are_ignored(self):
+        owner = await _make_user("crdt_owner6")
+        page = await _make_page(owner)
+        block_id = await _first_block_id(page)
+
+        a = await _connect(owner, page.id, client_id="a")
+        # 不正な base64、非 UUID の block_id でも接続は落ちず無視される
+        await a.send_json_to(
+            {"type": "crdt_update", "block_id": block_id, "update": "not valid base64!!!"}
+        )
+        await a.send_json_to(
+            {"type": "crdt_sync", "block_id": "not-a-uuid", "state": "###"}
+        )
+        assert await a.receive_nothing(timeout=0.3) is True
+        # その後も正常に動作する(接続が生きている)
+        pa = _Peer()
+        await _sync(a, pa, block_id)
+        assert pa.doc.text == ""
+        await a.disconnect()
 
     async def test_update_for_foreign_block_is_ignored(self):
         owner = await _make_user("crdt_owner3")

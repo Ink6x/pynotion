@@ -10,6 +10,7 @@
 - 同じ ``client_id`` から来たイベントは送信元クライアントには返さない
   (自分の変更を二重適用しないためのエコー除去)。
 """
+import uuid
 from urllib.parse import parse_qs
 
 from asgiref.sync import sync_to_async
@@ -18,6 +19,15 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.core.cache import cache
 
 from . import crdt_store
+from .models import Role, role_satisfies
+
+
+def _coerce_block_id(value) -> str | None:
+    """クライアント指定の block_id を UUID 文字列へ。不正なら None(DB 照会前に弾く)。"""
+    try:
+        return str(uuid.UUID(str(value)))
+    except (ValueError, AttributeError, TypeError):
+        return None
 
 # クローズコード (WebSocket): 認証なし / 権限なし
 CLOSE_UNAUTHENTICATED = 4401
@@ -103,7 +113,10 @@ class PageConsumer(AsyncJsonWebsocketConsumer):
         ここで扱うのはカーソル等のプレゼンス系のみ。viewer は送信できない。
         """
         msg_type = content.get("type")
-        if msg_type == "cursor" and self.role != "viewer":
+        # 編集系 (カーソル・テキスト更新) は REST と同じく editor 以上に限る。
+        # `!= "viewer"` だと commenter が編集できてしまい REST の境界を迂回する。
+        can_edit = role_satisfies(self.role, Role.EDITOR)
+        if msg_type == "cursor" and can_edit:
             await self.channel_layer.group_send(
                 self.group,
                 {
@@ -116,13 +129,15 @@ class PageConsumer(AsyncJsonWebsocketConsumer):
         elif msg_type == "crdt_sync":
             # 同期は読み取りのみ(差分を返すだけ)なので viewer にも許す。
             await self._handle_crdt_sync(content)
-        elif msg_type == "crdt_update" and self.role != "viewer":
+        elif msg_type == "crdt_update" and can_edit:
             await self._handle_crdt_update(content)
         # それ以外 (未知 / viewer の書き込み試行) は黙って無視する
 
     async def _handle_crdt_sync(self, content: dict) -> None:
         """クライアントの state vector に対し、不足分の CRDT 更新を返す。"""
-        block_id = content.get("block_id")
+        block_id = _coerce_block_id(content.get("block_id"))
+        if block_id is None:
+            return
         seed = await self._block_seed_text(block_id)
         if seed is None:  # このページに属さないブロックは無視 (認可スコープ)
             return
@@ -135,9 +150,9 @@ class PageConsumer(AsyncJsonWebsocketConsumer):
 
     async def _handle_crdt_update(self, content: dict) -> None:
         """クライアントのテキスト更新をマージし、他購読者へ中継して永続化する。"""
-        block_id = content.get("block_id")
+        block_id = _coerce_block_id(content.get("block_id"))
         update = content.get("update")
-        if not isinstance(update, str):
+        if block_id is None or not isinstance(update, str):
             return
         seed = await self._block_seed_text(block_id)
         if seed is None:
@@ -204,7 +219,12 @@ class PageConsumer(AsyncJsonWebsocketConsumer):
 
     @database_sync_to_async
     def _block_seed_text(self, block_id) -> str | None:
-        """このページに属するブロックの現在テキスト(種)。属さなければ None。"""
+        """このページに属するブロックの現在テキスト(種)。属さなければ None。
+
+        ``page_id`` スコープの照合は**認可境界**でもある(購読中のページのブロックしか
+        編集できない)。cache が温まっていても毎回必ず通すこと(省略すると別ページの
+        ブロックへ更新を注入できてしまう)。
+        """
         from .models import Block
 
         return (
