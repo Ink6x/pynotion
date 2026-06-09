@@ -14,6 +14,7 @@ JSONB への GIN インデックスは PostgreSQL 専用のため、モデル Me
 Postgres 限定マイグレーション(RunPython の vendor ガード)で作成する
 (pages の pg_trgm と同じ作法。makemigrations の状態をバックエンド間で揃える)。
 """
+import re
 import uuid
 
 from django.db import models
@@ -25,6 +26,25 @@ from .properties import PropertyType, empty_value, validate_value
 
 # Enum を Django の choices へ展開(値は properties.PropertyType と一致)。
 PROPERTY_TYPE_CHOICES = [(t.value, t.value) for t in PropertyType]
+
+# プロパティ key は ``values__<key>`` の ORM ルックアップに直接埋め込むため、
+# 英数字とアンダースコアに限定し、``__``(Django のルックアップ区切り)を禁じる。
+# これで動的フィルタ構築時に意図しないトランスフォーム注入が起きない。
+_KEY_RE = re.compile(r"^[a-zA-Z0-9]+(?:_[a-zA-Z0-9]+)*$")
+
+
+def validate_property_key(key: str) -> str:
+    if not isinstance(key, str) or not _KEY_RE.match(key):
+        raise ValueError(
+            "プロパティ key は英数字とアンダースコアのみ("
+            "先頭末尾は英数字、`__` 不可)で指定してください"
+        )
+    return key
+
+
+class ViewType(models.TextChoices):
+    TABLE = "table", "テーブル"
+    BOARD = "board", "ボード"
 
 
 class Database(models.Model):
@@ -57,10 +77,11 @@ class PropertySchemaManager(models.Manager):
     ) -> "PropertySchema":
         # 未知の型はここで弾く(DB へ不正な型名を保存させない)。
         ptype = PropertyType(type).value
+        safe_key = validate_property_key(key) if key else uuid.uuid4().hex
         last = self.filter(database=database).order_by("position").last()
         return self.create(
             database=database,
-            key=key or uuid.uuid4().hex,
+            key=safe_key,
             name=name,
             type=ptype,
             config=config or {},
@@ -155,6 +176,42 @@ class DatabaseRow(models.Model):
 
     def __str__(self) -> str:
         return f"Row({self.id})"
+
+
+class DatabaseView(models.Model):
+    """データベースの 1 つのビュー(テーブル / ボード)。
+
+    ``filters`` / ``sorts`` / ``group_by`` は宣言的 JSON として保持し、
+    ``databases.query`` がサーバ側で **ORM の Q オブジェクトへ動的変換**する
+    (演算子はホワイトリスト、フィールドはスキーマ照合で SQL インジェクションを防ぐ)。
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    database = models.ForeignKey(
+        Database, on_delete=models.CASCADE, related_name="views"
+    )
+    name = models.CharField(max_length=255, default="ビュー")
+    type = models.CharField(
+        max_length=16, choices=ViewType.choices, default=ViewType.TABLE
+    )
+    # 例: {"and": [{"property": "status", "op": "eq", "value": "Done"}]}
+    filters = models.JSONField(default=dict, blank=True)
+    # 例: [{"property": "due", "direction": "asc"}]
+    sorts = models.JSONField(default=list, blank=True)
+    # ボードのグループ化に使うプロパティ key(select 型)。
+    group_by = models.CharField(max_length=64, blank=True, default="")
+    position = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["position", "created_at"]
+        indexes = [
+            models.Index(fields=["database", "position"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.type})"
 
 
 def normalize_row_values(database: Database, values: dict) -> dict:
