@@ -158,3 +158,65 @@ def validate_value(ptype: str | PropertyType, value, config: dict | None = None)
     except (KeyError, ValueError) as exc:
         raise ValueError(f"未知のプロパティ型です: {ptype!r}") from exc
     return validator(value, config or {})
+
+
+def _candidate(new_type: PropertyType, value):
+    """旧値を新しい型に寄せた「候補値」を作る(検証は呼び出し側で行う)。"""
+    if new_type == PropertyType.TEXT:
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, list):
+            return ", ".join(str(x) for x in value)
+        return str(value)
+    if new_type == PropertyType.NUMBER:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int | float):
+            return value
+        if isinstance(value, str):
+            try:
+                num = float(value)
+            except ValueError:
+                return None
+            return int(num) if num.is_integer() else num
+        return None
+    if new_type == PropertyType.SELECT:
+        if isinstance(value, list):
+            return value[0] if value else None
+        if value is None:
+            return None
+        return str(value)
+    if new_type == PropertyType.MULTI_SELECT:
+        if isinstance(value, list):
+            return [str(x) for x in value]
+        if value in (None, ""):
+            return []
+        return [str(value)]
+    if new_type == PropertyType.DATE:
+        return value if isinstance(value, str) else None
+    if new_type == PropertyType.CHECKBOX:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, int | float):
+            return bool(value)  # 0 / 0.0 → False、非ゼロ → True
+        if isinstance(value, str):
+            return value.strip().lower() in ("true", "1", "yes", "on")
+        return False
+    # RELATION(到達する最後の型)
+    return [str(x) for x in value] if isinstance(value, list) else []
+
+
+def coerce_value(new_type: str | PropertyType, value, config: dict | None = None):
+    """型変更時に旧値を新しい型へ移行する。
+
+    旧値から候補を作り、新しい型で検証する。移行できない値は新しい型の空値へ
+    落とす(型変更でデータが壊れて保存されないよう、必ず正規値を返す)。
+    """
+    new_type = PropertyType(new_type)
+    candidate = _candidate(new_type, value)
+    try:
+        return validate_value(new_type, candidate, config or {})
+    except ValueError:
+        return empty_value(new_type)

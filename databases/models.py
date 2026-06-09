@@ -16,13 +16,14 @@ Postgres 限定マイグレーション(RunPython の vendor ガード)で作成
 """
 import re
 import uuid
+from collections.abc import Callable
 
-from django.db import models
+from django.db import models, transaction
 
 from pages.models import Page
 from pages.ordering import key_between
 
-from .properties import PropertyType, empty_value, validate_value
+from .properties import PropertyType, coerce_value, empty_value, validate_value
 
 # Enum を Django の choices へ展開(値は properties.PropertyType と一致)。
 PROPERTY_TYPE_CHOICES = [(t.value, t.value) for t in PropertyType]
@@ -251,6 +252,68 @@ class DatabaseView(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.type})"
+
+
+# 値移行を一度に読むチャンク数。全行を一括ロードしてメモリを溢れさせないため、
+# position の keyset ページングで分割して読み書きする。
+MIGRATION_CHUNK_SIZE = 500
+
+
+def _rewrite_row_values(
+    database: Database, key: str, transform: Callable[[dict], dict]
+) -> None:
+    """全行の値辞書を ``transform`` で書き換える(メモリ有界・keyset ページング)。
+
+    position 順に固定サイズで読み、当該 ``key`` を持つ行だけ ``transform`` した新しい
+    辞書へ差し替えて ``bulk_update`` する。値の書き換え中に position は変えないため
+    position カーソルは安定し、取りこぼし/重複なく全行を 1 度ずつ処理できる。
+    呼び出し側がトランザクションで囲む前提。
+    """
+    base = database.rows.only("id", "values", "position").order_by("position")
+    cursor: str | None = None
+    while True:
+        page = base.filter(position__gt=cursor) if cursor is not None else base
+        chunk = list(page[:MIGRATION_CHUNK_SIZE])
+        if not chunk:
+            break
+        changed: list[DatabaseRow] = []
+        for row in chunk:
+            if key in row.values:
+                row.values = transform(row.values)
+                changed.append(row)
+        if changed:
+            DatabaseRow.objects.bulk_update(changed, ["values"])
+        cursor = chunk[-1].position
+
+
+def change_property_type(
+    prop: PropertySchema, *, new_type: str, new_config: dict | None = None
+) -> None:
+    """プロパティの型を変更し、既存行の値を新しい型へ移行する。
+
+    全行の当該キーを ``coerce_value`` で移行(移行不能は空値へ)してから型/設定を
+    保存する。値の移行と型の保存を **1 トランザクション**で行い、途中失敗で
+    「値だけ新型・スキーマは旧型」のような不整合が残らないようにする。
+    """
+    new_type = PropertyType(new_type).value
+    config = new_config if new_config is not None else prop.config
+    with transaction.atomic():
+        _rewrite_row_values(
+            prop.database,
+            prop.key,
+            lambda values: {**values, prop.key: coerce_value(new_type, values[prop.key], config)},
+        )
+        prop.type = new_type
+        prop.config = config
+        prop.save(update_fields=["type", "config", "updated_at"])
+
+
+def forget_property_key(database: Database, key: str) -> None:
+    """全行の値辞書から ``key`` を取り除く(プロパティ削除後の後始末)。"""
+    with transaction.atomic():
+        _rewrite_row_values(
+            database, key, lambda values: {k: v for k, v in values.items() if k != key}
+        )
 
 
 def normalize_row_values(database: Database, values: dict) -> dict:
