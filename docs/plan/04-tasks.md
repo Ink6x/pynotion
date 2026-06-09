@@ -103,33 +103,47 @@
 
 ## Phase 4 — 最高難度と運用の完成
 
-### C-3b. 文字単位の競合解決(CRDT)
+実装順序は **4-A → 4-B → 4-C → 4-D → 4-E**(スパイク先行)。
+詳細・根拠は [03-roadmap.md](./03-roadmap.md#phase-4-実装順序スパイク先行-確定-2026-06-09) を参照。
 
-- [ ] Yjs / y-py のスパイク検証(統合可否の見極め)
-- [ ] ブロックテキストの Yjs ドキュメント化
-- [ ] デバウンス + スナップショット永続化
-- [ ] IME 変換中のリモート更新適用制御
-- [ ] リモートカーソル表示
+### 4-A. CRDT スパイク + 判定(最初に着手)— ✅ 完了 / **GO**
 
-### D. データベースビュー
+- [x] サーバ側 CRDT バインディングの選定(y-py 更新停止 → **pycrdt** 採用)
+- [x] 収束性の検証(`pages/crdt.py` `BlockDoc` + `test_crdt_spike.py`: 並行編集の
+      収束・可換・冪等・削除複製・同期プロトコルの落とし穴を固定)
+- [x] 「REST=source of truth」設計と CRDT 永続化の両立方針を決定
+      (テキストのみ CRDT 化、構造操作は REST 楽観ロック維持、`Block.text` を耐久 source)
+- [x] 設計判断を [02-architecture.md](./02-architecture.md) の判断記録(#6 / #7)へ追記
+- [x] **go/no-go 判定 → GO**(4-D 本実装へ進む)
 
+### 4-B. データベースビュー(D)
+
+- [ ] `databases/` アプリ作成
 - [ ] `Database` / `DatabaseRow` / `PropertySchema` モデル
 - [ ] JSONB プロパティ値 + GinIndex
-- [ ] 型ごとのバリデーション(text / number / select / date / checkbox / relation)
-- [ ] `DatabaseView`(filters / sorts / group_by)— 宣言的 JSON → `Q` 動的変換(演算子ホワイトリスト)
+- [ ] 型ごとのバリデーション(text / number / select / multi_select / date / checkbox / relation)
+- [ ] `DatabaseView`(filters / sorts / group_by)— 宣言的 JSON → `Q` 動的変換(演算子ホワイトリスト、SQL インジェクション防止テスト先行)
 - [ ] table view UI
 - [ ] board view UI(グループ間 DnD — fractional indexing 再利用)
 - [ ] プロパティ型変更時の値マイグレーション
 
-### G. 非同期エクスポート / Webhook
+### 4-C. 非同期エクスポート / Webhook(G)
 
+- [ ] `exports/` アプリ作成
 - [ ] RQ セットアップ(Redis 共有)
-- [ ] Markdown エクスポート(ブロックツリー → md)
-- [ ] PDF エクスポート(WeasyPrint)+ 進捗通知
+- [ ] Markdown エクスポート(`serialize_block_tree` 走査 → md)
+- [ ] PDF エクスポート(WeasyPrint)+ 進捗通知(Channels で push)
 - [ ] Webhook 登録 + HMAC 署名付き配信
 - [ ] 指数バックオフ・リトライ・冪等性
 
-### 運用仕上げ
+### 4-D. 文字単位の競合解決(CRDT / C-3b)— 4-A が go の場合のみ
+
+- [ ] ブロックテキストの Yjs ドキュメント化
+- [ ] デバウンス + スナップショット永続化
+- [ ] IME 変換中のリモート更新適用制御(既存 `isComposing` 拡張)
+- [ ] リモートカーソル表示
+
+### 4-E. 運用仕上げ(最後)
 
 - [ ] Sentry 統合(DSN は環境変数)
 - [ ] 負荷試験の数値を README に反映
