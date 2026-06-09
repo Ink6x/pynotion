@@ -39,7 +39,7 @@ def generate_secret() -> str:
 
 def sign(secret: str, body: bytes) -> str:
     """ボディの HMAC-SHA256 署名(``sha256=<hex>`` 形式)。"""
-    mac = hmac.new(secret.encode(), body, hashlib.sha256)
+    mac = hmac.HMAC(secret.encode(), body, hashlib.sha256)
     return "sha256=" + mac.hexdigest()
 
 
@@ -72,18 +72,33 @@ def validate_url(url: str) -> str:
     return url
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """リダイレクトを辿らない。
+
+    登録時に ``validate_url`` で内部宛先を弾いても、登録した公開 URL が
+    ``302 Location: http://169.254.169.254/...`` を返せば内部へ到達できてしまう
+    (SSRF 迂回)。配信時はリダイレクトを一切辿らずエラーにする。
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "リダイレクトは辿りません", headers, fp)
+
+
+_no_redirect_opener = urllib.request.build_opener(_NoRedirectHandler)
+
+
 def deliver(  # pragma: no cover - 実 HTTP POST(テストではモックする)
     url: str, body: bytes, headers: dict, *, timeout: int = DEFAULT_TIMEOUT
 ) -> int:
-    """URL へ POST し、HTTP ステータスを返す。非 2xx / ネットワーク失敗は例外。"""
+    """URL へ POST し、HTTP ステータスを返す。非 2xx / ネットワーク失敗 / リダイレクトは例外。"""
     request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with _no_redirect_opener.open(request, timeout=timeout) as response:
         return response.status
 
 
 def _backoff(attempt: int) -> float:
-    """指数バックオフ秒(1, 5, 25, ...)。"""
-    return float(5**attempt)
+    """指数バックオフ秒(1, 5, 25, ... 上限 30)。"""
+    return min(float(5**attempt), 30.0)
 
 
 def send_with_retry(
@@ -103,6 +118,9 @@ def send_with_retry(
     """
     from .models import WebhookDelivery
 
+    # TODO: 非同期(RQ)で複数ワーカーが同時に同一イベントを処理しうるようになったら、
+    # select_for_update でこの「取得 → done 判定 → 配信」を直列化する(現状は同期 ping
+    # のみで競合しない)。一意制約は二重行生成までは防ぐ。
     delivery, _ = WebhookDelivery.objects.get_or_create(
         webhook=webhook,
         event_id=event_id,
@@ -136,8 +154,9 @@ def send_with_retry(
         except urllib.error.HTTPError as exc:
             last_code = exc.code
             last_error = f"HTTP {exc.code}"
-        except (urllib.error.URLError, OSError) as exc:
-            last_error = str(exc)
+        except (urllib.error.URLError, OSError):
+            # 生の例外文字列は内部ホスト/ポート/errno を露出しうるため一般化して保存する。
+            last_error = "配信先への接続に失敗しました"
         if attempt < max_attempts - 1:
             sleep(backoff(attempt))
 

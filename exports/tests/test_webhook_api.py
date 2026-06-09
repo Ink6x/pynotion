@@ -34,6 +34,19 @@ def test_register_webhook_returns_secret_once(authenticated_client, page):
     assert data["secret"]  # 登録直後は secret を返す
 
 
+def test_register_enforces_per_page_limit(authenticated_client, page):
+    from exports.api import MAX_WEBHOOKS_PER_PAGE
+
+    for i in range(MAX_WEBHOOKS_PER_PAGE):
+        Webhook.objects.create(page=page, url=f"https://example.com/{i}", secret="x")
+    res = post_json(
+        authenticated_client,
+        "/api/webhooks/",
+        {"page_id": str(page.id), "url": "https://example.com/over"},
+    )
+    assert res.status_code == 400  # 上限超過
+
+
 def test_register_rejects_internal_url(authenticated_client, page):
     res = post_json(
         authenticated_client,

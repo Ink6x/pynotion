@@ -21,6 +21,9 @@ from .webhooks import generate_secret, send_with_retry, validate_url
 router = Router(tags=["exports"])
 webhooks_router = Router(tags=["webhooks"])
 
+# 1 ページあたりの Webhook 登録上限(イベント発火時の送信数・リソースを上限で抑える)。
+MAX_WEBHOOKS_PER_PAGE = 10
+
 
 def _get_page_viewer(page_id: uuid.UUID, user) -> Page:
     page = Page.objects.alive().filter(pk=page_id).first()
@@ -86,6 +89,8 @@ def _get_webhook(webhook_id: uuid.UUID, user) -> Webhook:
 def create_webhook(request, payload: WebhookCreateIn):
     _enforce_write_ratelimit(request)
     page = _get_page_full(payload.page_id, request.user)
+    if page.webhooks.count() >= MAX_WEBHOOKS_PER_PAGE:
+        raise ValueError(f"1 ページあたりの Webhook 登録数は最大 {MAX_WEBHOOKS_PER_PAGE} 件です")
     url = validate_url(payload.url)  # スキーム検証 + 内部宛先拒否 (SSRF 対策)
     webhook = Webhook.objects.create(
         page=page, created_by=request.user, url=url, secret=generate_secret()

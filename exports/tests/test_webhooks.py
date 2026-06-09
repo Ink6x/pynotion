@@ -26,6 +26,27 @@ def test_validate_url_accepts_public_https():
 
 
 @pytest.mark.unit
+def test_backoff_is_capped():
+    from exports.webhooks import _backoff
+
+    assert webhooks._backoff(0) == 1.0
+    assert webhooks._backoff(1) == 5.0
+    assert _backoff(10) == 30.0  # 上限でクランプ
+
+
+@pytest.mark.unit
+def test_no_redirect_handler_raises_instead_of_following():
+    # リダイレクトを辿らず HTTPError にする(登録後リダイレクトでの SSRF 迂回を防ぐ)
+    handler = webhooks._NoRedirectHandler()
+
+    class _Req:
+        full_url = "https://example.com/hook"
+
+    with pytest.raises(urllib.error.HTTPError):
+        handler.redirect_request(_Req(), None, 302, "Found", {}, "http://169.254.169.254/")
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "url",
     [
@@ -101,7 +122,8 @@ def test_all_attempts_fail(monkeypatch, webhook):
     delivery = _send(webhook, max_attempts=3)
     assert delivery.status == WebhookDelivery.Status.FAILED
     assert delivery.attempts == 3
-    assert "down" in delivery.error
+    # 接続失敗は内部情報を漏らさない一般化メッセージで保存される
+    assert delivery.error == "配信先への接続に失敗しました"
 
 
 def test_http_error_records_status_code(monkeypatch, webhook):
