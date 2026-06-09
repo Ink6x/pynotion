@@ -138,13 +138,22 @@ def _enforce_write_ratelimit(request) -> None:
         raise Ratelimited()
 
 
-def _get_page(page_id: uuid.UUID, user, min_role: Role, queryset: str = "alive") -> Page:
+def _get_page(
+    page_id: uuid.UUID,
+    user,
+    min_role: Role,
+    queryset: str = "alive",
+    *,
+    select_related: tuple[str, ...] = (),
+) -> Page:
     """対象ページを取得しロールを検査する (require_role 相当)。"""
     qs = {
         "alive": Page.objects.alive(),
         "trashed": Page.objects.trashed(),
         "all": Page.objects.all(),
     }[queryset]
+    if select_related:
+        qs = qs.select_related(*select_related)
     page = qs.filter(pk=page_id).first()
     if page is None:
         raise LookupError(NOT_FOUND_MESSAGE)
@@ -262,20 +271,17 @@ def list_trash(request):
 
 @api.get("/pages/{uuid:page_id}/")
 def page_detail(request, page_id: uuid.UUID):
-    page = _get_page(page_id, request.user, Role.VIEWER)
+    # このページがデータベース化されているか (フロントが table/board を出すため) を
+    # 逆 OneToOne の select_related でページ取得に畳み込む (追加クエリなし)。
+    page = _get_page(page_id, request.user, Role.VIEWER, select_related=("database",))
     # 全ブロックを 1 クエリで取得し、メモリ上でネストツリーへ (N+1 なし)。
     blocks = serialize_block_tree(page.blocks.order_by("position"))
-    # このページがデータベース化されているか (フロントが table/board を出すため)。
-    # 単一ページの取得なので 1 クエリ追加で済む (ツリーの serialize_page には足さない)。
-    from databases.models import Database
-
-    database_id = (
-        Database.objects.filter(page_id=page.id).values_list("id", flat=True).first()
-    )
+    # 逆 OneToOne の RelatedObjectDoesNotExist は AttributeError 派生のため getattr で None。
+    database = getattr(page, "database", None)
     return {
         "page": serialize_page(page),
         "blocks": blocks,
-        "database_id": str(database_id) if database_id else None,
+        "database_id": str(database.id) if database else None,
     }
 
 
