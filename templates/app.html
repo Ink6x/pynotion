@@ -4,6 +4,7 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/sidebar.css' %}">
 <link rel="stylesheet" href="{% static 'css/editor.css' %}">
+<link rel="stylesheet" href="{% static 'css/databases.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -38,12 +39,14 @@
       <div id="page-view" class="hidden">
         <div class="page-actions">
           <span id="presence" class="presence hidden" aria-live="polite"></span>
+          <button class="btn btn-ghost" id="database-button" type="button">📊 データベース化</button>
           <button class="btn btn-ghost" id="history-button" type="button">🕘 履歴</button>
           <button class="btn btn-ghost" id="share-button" type="button">🔗 共有</button>
         </div>
         <div class="page-icon" id="page-icon" title="アイコンを変更"></div>
         <h1 class="page-title" id="page-title" contenteditable="true" data-placeholder="無題"></h1>
         <div id="editor" class="editor"></div>
+        <div id="database-view" class="database-view hidden"></div>
       </div>
     </div>
   </main>
@@ -60,5 +63,6 @@
 <script src="{% static 'js/editor.js' %}"></script>
 <script src="{% static 'js/slashmenu.js' %}"></script>
 <script src="{% static 'js/modals.js' %}"></script>
+<script src="{% static 'js/databases.js' %}"></script>
 <script src="{% static 'js/app.js' %}"></script>
 {% endblock %}

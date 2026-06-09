@@ -265,7 +265,18 @@ def page_detail(request, page_id: uuid.UUID):
     page = _get_page(page_id, request.user, Role.VIEWER)
     # 全ブロックを 1 クエリで取得し、メモリ上でネストツリーへ (N+1 なし)。
     blocks = serialize_block_tree(page.blocks.order_by("position"))
-    return {"page": serialize_page(page), "blocks": blocks}
+    # このページがデータベース化されているか (フロントが table/board を出すため)。
+    # 単一ページの取得なので 1 クエリ追加で済む (ツリーの serialize_page には足さない)。
+    from databases.models import Database
+
+    database_id = (
+        Database.objects.filter(page_id=page.id).values_list("id", flat=True).first()
+    )
+    return {
+        "page": serialize_page(page),
+        "blocks": blocks,
+        "database_id": str(database_id) if database_id else None,
+    }
 
 
 @api.patch("/pages/{uuid:page_id}/")

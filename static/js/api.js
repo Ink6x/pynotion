@@ -77,5 +77,22 @@ const API = (() => {
     updateBlock: (id, payload) => request("PATCH", `/api/blocks/${id}/`, payload),
     deleteBlock: (id) => request("DELETE", `/api/blocks/${id}/`),
     moveBlock: (id, payload) => request("POST", `/api/blocks/${id}/move/`, payload),
+    // データベースビュー
+    createDatabase: (pageId) => request("POST", "/api/databases/", { page_id: pageId }),
+    getDatabase: (id) => request("GET", `/api/databases/${id}/`),
+    createProperty: (dbId, payload) =>
+      request("POST", `/api/databases/${dbId}/properties/`, payload),
+    updateProperty: (dbId, propId, payload) =>
+      request("PATCH", `/api/databases/${dbId}/properties/${propId}/`, payload),
+    deleteProperty: (dbId, propId) =>
+      request("DELETE", `/api/databases/${dbId}/properties/${propId}/`),
+    createRow: (dbId, payload) => request("POST", `/api/databases/${dbId}/rows/`, payload || {}),
+    updateRow: (rowId, payload) => request("PATCH", `/api/databases/rows/${rowId}/`, payload),
+    deleteRow: (rowId) => request("DELETE", `/api/databases/rows/${rowId}/`),
+    createView: (dbId, payload) => request("POST", `/api/databases/${dbId}/views/`, payload || {}),
+    updateView: (viewId, payload) =>
+      request("PATCH", `/api/databases/views/${viewId}/`, payload),
+    deleteView: (viewId) => request("DELETE", `/api/databases/views/${viewId}/`),
+    viewRows: (viewId) => request("GET", `/api/databases/views/${viewId}/rows/`),
   };
 })();

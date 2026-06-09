@@ -45,6 +45,31 @@ const App = (() => {
     });
 
     document.getElementById("page-icon").addEventListener("click", openIconPicker);
+    document.getElementById("database-button").addEventListener("click", turnIntoDatabase);
+  }
+
+  /** 現在のページをデータベース化し、テーブルを表示する。 */
+  async function turnIntoDatabase() {
+    if (!currentPage) return;
+    if (currentPage.database_id) return; // 既にデータベース
+    try {
+      const data = await API.createDatabase(currentPage.id);
+      currentPage = { ...currentPage, database_id: data.database.id };
+      updateDatabaseButton();
+      if (window.Databases) await Databases.render(databaseEl(), data.database.id);
+    } catch (err) {
+      toast(err.message || "データベース化に失敗しました");
+    }
+  }
+
+  function databaseEl() {
+    return document.getElementById("database-view");
+  }
+
+  function updateDatabaseButton() {
+    const btn = document.getElementById("database-button");
+    const isDb = Boolean(currentPage && currentPage.database_id);
+    btn.classList.toggle("hidden", isDb); // 既にデータベースなら隠す
   }
 
   function toggleTheme() {
@@ -70,7 +95,7 @@ const App = (() => {
       titleSaveTimer = null;
     }
     const data = await API.getPage(id);
-    currentPage = data.page;
+    currentPage = { ...data.page, database_id: data.database_id || null };
     localStorage.setItem(LAST_PAGE_KEY, id);
 
     document.getElementById("page-empty").classList.add("hidden");
@@ -82,6 +107,12 @@ const App = (() => {
 
     Sidebar.setActive(id);
     if (window.Editor) Editor.open(currentPage, data.blocks);
+    // データベース化されていればテーブルを表示、そうでなければ隠す
+    updateDatabaseButton();
+    if (window.Databases) {
+      if (currentPage.database_id) await Databases.render(databaseEl(), currentPage.database_id);
+      else Databases.hide();
+    }
     // このページのリアルタイムチャンネルを購読する
     if (window.Realtime) Realtime.connect(id);
   }

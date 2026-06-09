@@ -127,7 +127,8 @@
 - [x] `DatabaseView`(filters / sorts / group_by)— 宣言的 JSON → `Q` 動的変換(演算子ホワイトリスト、SQL インジェクション防止テスト先行)(4-B-2、`databases/query.py`)
 - [x] データベース API(django-ninja Router、既存封筒・認可を共有。プロパティ /
       行 / ビュー CRUD、ビュー実行 = table 行列・board グループ化)(4-B-3)
-- [ ] table view UI(4-B-4)
+- [x] table view UI(4-B-4、`static/js/databases.js`。ページのデータベース化・列/行追加・
+      型別セル編集・永続化。ページ詳細 API に `database_id` を追加。E2E 1 本)
 - [ ] board view UI(グループ間 DnD — fractional indexing 再利用)(4-B-5)
 - [ ] プロパティ型変更時の値マイグレーション(4-B-6)
 

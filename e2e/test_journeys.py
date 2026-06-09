@@ -151,6 +151,41 @@ def test_version_history_restore(app):
     expect(app.locator("#editor .block-content").first).to_have_text("")
 
 
+def test_database_table_add_column_row_and_edit(app):
+    """ページをデータベース化し、列・行を追加してセルを編集、リロードで永続化を確認。"""
+    create_page_with_first_block(app)
+
+    # データベース化 → テーブルが描画される
+    app.click("#database-button")
+    app.wait_for_selector(".db-table")
+
+    # text 列「タイトル」を追加
+    app.click(".db-add-col")
+    pop = app.locator(".db-add-col-pop")
+    expect(pop).to_be_visible()
+    pop.locator(".db-col-name-input").fill("タイトル")
+    pop.locator(".db-col-type-input").select_option("text")
+    pop.locator(".db-col-create").click()
+    expect(app.locator(".db-col-name", has_text="タイトル")).to_have_count(1)
+
+    # 行を追加
+    app.click(".db-add-row")
+    expect(app.locator(".db-row")).to_have_count(1)
+
+    # セルへ入力し Enter (blur) で保存
+    cell = app.locator(".db-row .db-input").first
+    cell.click()
+    cell.fill("設計タスク")
+    app.keyboard.press("Enter")
+    # 保存 (PATCH) の完了を待ってからリロード
+    app.wait_for_timeout(500)
+
+    # リロードしても値が残っている = サーバへ永続化された
+    app.reload()
+    app.wait_for_selector(".db-table")
+    expect(app.locator(".db-row .db-input").first).to_have_value("設計タスク")
+
+
 def test_search_then_trash_and_restore(app):
     """検索でページを開き、ゴミ箱へ移動して復元する。"""
     create_page_with_first_block(app)
