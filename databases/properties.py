@@ -199,7 +199,11 @@ def _candidate(new_type: PropertyType, value):
     if new_type == PropertyType.CHECKBOX:
         if isinstance(value, bool):
             return value
-        return str(value).strip().lower() in ("true", "1", "yes", "on")
+        if isinstance(value, int | float):
+            return bool(value)  # 0 / 0.0 → False、非ゼロ → True
+        if isinstance(value, str):
+            return value.strip().lower() in ("true", "1", "yes", "on")
+        return False
     # RELATION(到達する最後の型)
     return [str(x) for x in value] if isinstance(value, list) else []
 

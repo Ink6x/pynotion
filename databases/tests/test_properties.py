@@ -258,6 +258,19 @@ def test_coerce_to_checkbox():
     assert coerce_value("checkbox", 1) is True
 
 
+def test_coerce_number_to_checkbox():
+    # 数値は 0 のみ False、非ゼロは True(str 一致依存をやめた)
+    assert coerce_value("checkbox", 0) is False
+    assert coerce_value("checkbox", 2) is True
+    assert coerce_value("checkbox", 2.5) is True
+
+
+def test_coerce_nonscalar_to_checkbox_is_false():
+    # list / None など真偽でも数値でも文字列でもない値は False
+    assert coerce_value("checkbox", ["a"]) is False
+    assert coerce_value("checkbox", None) is False
+
+
 def test_coerce_text_to_date_invalid_is_none():
     assert coerce_value("date", "not a date") is None
     assert coerce_value("date", "2026-06-09") == "2026-06-09"

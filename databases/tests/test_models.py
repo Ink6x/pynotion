@@ -172,6 +172,48 @@ def test_change_property_type_to_select_with_new_options(database):
     assert drop.values["s"] is None  # 選択肢に無い値は空へ
 
 
+def test_change_property_type_on_empty_database(database):
+    prop = PropertySchema.objects.create_property(
+        database=database, key="x", name="X", type="text"
+    )
+    change_property_type(prop, new_type="number")  # 行ゼロでも成功する
+    prop.refresh_from_db()
+    assert prop.type == "number"
+
+
+def test_change_property_type_round_trip(database):
+    prop = PropertySchema.objects.create_property(
+        database=database, key="n", name="N", type="text"
+    )
+    row = DatabaseRow.objects.create_row(database=database, values={"n": "5"})
+    change_property_type(prop, new_type="number")
+    change_property_type(prop, new_type="text")
+    row.refresh_from_db()
+    assert row.values["n"] == "5"  # text→number→text で元に戻る
+
+
+def test_change_property_type_migrates_across_chunks(database):
+    from databases.models import MIGRATION_CHUNK_SIZE
+
+    prop = PropertySchema.objects.create_property(
+        database=database, key="q", name="Q", type="text"
+    )
+    # チャンク境界を跨ぐ行数で全行が移行されることを固定する
+    total = MIGRATION_CHUNK_SIZE + 5
+    DatabaseRow.objects.bulk_create(
+        [
+            DatabaseRow(database=database, values={"q": str(i)}, position=f"{i:06d}")
+            for i in range(total)
+        ]
+    )
+    change_property_type(prop, new_type="number")
+    values = list(
+        DatabaseRow.objects.filter(database=database).values_list("values", flat=True)
+    )
+    assert len(values) == total
+    assert all(isinstance(v["q"], int) for v in values)  # 全行が数値へ
+
+
 def test_forget_property_key_removes_stale_values(database):
     prop = PropertySchema.objects.create_property(
         database=database, key="gone", name="消える", type="text"

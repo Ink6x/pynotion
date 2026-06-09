@@ -7,6 +7,7 @@
 """
 import uuid
 
+from django.db import transaction
 from ninja import Router
 
 from pages.api import _enforce_write_ratelimit
@@ -150,14 +151,16 @@ def update_property(
     prop = _get_property(database, property_id)
     fields = payload.model_fields_set
 
-    # 型変更は既存行の値移行を伴うため専用パスで扱う。
+    # 型変更は既存行の値移行を伴うため専用パスで扱う。改名と移行を 1 トランザクション
+    # にまとめ、途中失敗で「名前だけ変わって型移行は未完」の不整合を防ぐ。
     if "type" in fields and payload.type is not None and payload.type != prop.type:
         new_type = PropertyType(payload.type).value  # 未知の型はここで弾く
         new_config = payload.config if ("config" in fields and payload.config is not None) else None
-        if "name" in fields and payload.name is not None:
-            prop.name = payload.name
-            prop.save(update_fields=["name", "updated_at"])
-        change_property_type(prop, new_type=new_type, new_config=new_config)
+        with transaction.atomic():
+            if "name" in fields and payload.name is not None:
+                prop.name = payload.name
+                prop.save(update_fields=["name", "updated_at"])
+            change_property_type(prop, new_type=new_type, new_config=new_config)
         return {"property": serialize_property(prop)}
 
     update_fields = ["updated_at"]
@@ -177,9 +180,10 @@ def delete_property(request, database_id: uuid.UUID, property_id: uuid.UUID):
     database = _get_database(database_id, request.user, Role.EDITOR)
     prop = _get_property(database, property_id)
     key = prop.key
-    prop.delete()
-    # 既存行の values に残る当該 key を一括で取り除く(孤児キーの残存を防ぐ)。
-    forget_property_key(database, key)
+    # 削除と孤児キー除去を 1 トランザクションに(片方だけ成功する状態を防ぐ)。
+    with transaction.atomic():
+        prop.delete()
+        forget_property_key(database, key)
     return {"deleted": True}
 
 
