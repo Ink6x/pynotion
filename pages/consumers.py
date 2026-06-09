@@ -10,12 +10,24 @@
 - 同じ ``client_id`` から来たイベントは送信元クライアントには返さない
   (自分の変更を二重適用しないためのエコー除去)。
 """
+import uuid
 from urllib.parse import parse_qs
 
 from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.core.cache import cache
+
+from . import crdt_store
+from .models import Role, role_satisfies
+
+
+def _coerce_block_id(value) -> str | None:
+    """クライアント指定の block_id を UUID 文字列へ。不正なら None(DB 照会前に弾く)。"""
+    try:
+        return str(uuid.UUID(str(value)))
+    except (ValueError, AttributeError, TypeError):
+        return None
 
 # クローズコード (WebSocket): 認証なし / 権限なし
 CLOSE_UNAUTHENTICATED = 4401
@@ -41,6 +53,8 @@ class PageConsumer(AsyncJsonWebsocketConsumer):
         # group へ実際に join し presence を登録したかどうか。disconnect 時に
         # 「未参加で閉じた接続 (未認証/権限なし)」へ漏れ通知しないための番兵。
         self._joined_group = False
+        # この接続で CRDT 編集したブロック。切断時に最終状態を Block.text へ書き戻す。
+        self._edited_blocks: set[str] = set()
 
         if self.user is None or not self.user.is_authenticated:
             await self.close(code=CLOSE_UNAUTHENTICATED)
@@ -75,6 +89,10 @@ class PageConsumer(AsyncJsonWebsocketConsumer):
         # presence にも登録していないため leave を漏らさない。
         if not getattr(self, "_joined_group", False):
             return
+        # 編集中だったブロックの最終 CRDT 状態を Block.text へ確実に書き戻す
+        # (スロットリングで取りこぼした直近の編集を取りこぼさない)。
+        for block_id in self._edited_blocks:
+            await database_sync_to_async(crdt_store.flush)(block_id)
         members = await self._remove_presence()
         await self.channel_layer.group_discard(self.group, self.channel_name)
         await self.channel_layer.group_send(
@@ -95,7 +113,10 @@ class PageConsumer(AsyncJsonWebsocketConsumer):
         ここで扱うのはカーソル等のプレゼンス系のみ。viewer は送信できない。
         """
         msg_type = content.get("type")
-        if msg_type == "cursor" and self.role != "viewer":
+        # 編集系 (カーソル・テキスト更新) は REST と同じく editor 以上に限る。
+        # `!= "viewer"` だと commenter が編集できてしまい REST の境界を迂回する。
+        can_edit = role_satisfies(self.role, Role.EDITOR)
+        if msg_type == "cursor" and can_edit:
             await self.channel_layer.group_send(
                 self.group,
                 {
@@ -105,7 +126,49 @@ class PageConsumer(AsyncJsonWebsocketConsumer):
                     "sender": self.channel_name,
                 },
             )
+        elif msg_type == "crdt_sync":
+            # 同期は読み取りのみ(差分を返すだけ)なので viewer にも許す。
+            await self._handle_crdt_sync(content)
+        elif msg_type == "crdt_update" and can_edit:
+            await self._handle_crdt_update(content)
         # それ以外 (未知 / viewer の書き込み試行) は黙って無視する
+
+    async def _handle_crdt_sync(self, content: dict) -> None:
+        """クライアントの state vector に対し、不足分の CRDT 更新を返す。"""
+        block_id = _coerce_block_id(content.get("block_id"))
+        if block_id is None:
+            return
+        seed = await self._block_seed_text(block_id)
+        if seed is None:  # このページに属さないブロックは無視 (認可スコープ)
+            return
+        update_b64 = await database_sync_to_async(crdt_store.sync_update)(
+            block_id, seed, content.get("state")
+        )
+        await self.send_json(
+            {"kind": "crdt_sync", "block_id": block_id, "update": update_b64}
+        )
+
+    async def _handle_crdt_update(self, content: dict) -> None:
+        """クライアントのテキスト更新をマージし、他購読者へ中継して永続化する。"""
+        block_id = _coerce_block_id(content.get("block_id"))
+        update = content.get("update")
+        if block_id is None or not isinstance(update, str):
+            return
+        seed = await self._block_seed_text(block_id)
+        if seed is None:
+            return
+        await database_sync_to_async(crdt_store.apply_update)(block_id, seed, update)
+        self._edited_blocks.add(str(block_id))
+        await self.channel_layer.group_send(
+            self.group,
+            {
+                "type": "crdt.event",
+                "block_id": block_id,
+                "update": update,
+                "sender": self.channel_name,
+            },
+        )
+        await database_sync_to_async(crdt_store.maybe_flush)(block_id)
 
     # --- group メッセージ → クライアントへの転送 ----------------------------
 
@@ -140,7 +203,35 @@ class PageConsumer(AsyncJsonWebsocketConsumer):
             {"kind": "cursor", "user": event["user"], "block_id": event["block_id"]}
         )
 
+    async def crdt_event(self, event: dict) -> None:
+        """他クライアントの CRDT 更新を購読者へ中継する(送信元には返さない)。"""
+        if event.get("sender") == self.channel_name:
+            return
+        await self.send_json(
+            {
+                "kind": "crdt_update",
+                "block_id": event["block_id"],
+                "update": event["update"],
+            }
+        )
+
     # --- ヘルパー -----------------------------------------------------------
+
+    @database_sync_to_async
+    def _block_seed_text(self, block_id) -> str | None:
+        """このページに属するブロックの現在テキスト(種)。属さなければ None。
+
+        ``page_id`` スコープの照合は**認可境界**でもある(購読中のページのブロックしか
+        編集できない)。cache が温まっていても毎回必ず通すこと(省略すると別ページの
+        ブロックへ更新を注入できてしまう)。
+        """
+        from .models import Block
+
+        return (
+            Block.objects.filter(pk=block_id, page_id=self.page_id)
+            .values_list("text", flat=True)
+            .first()
+        )
 
     def _client_id_from_query(self) -> str | None:
         qs = parse_qs(self.scope.get("query_string", b"").decode())
