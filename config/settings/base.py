@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "accounts",
     "pages",
     "databases",
+    "exports",
 ]
 
 
@@ -122,3 +123,7 @@ CACHES = {
 
 # ページツリーキャッシュの TTL (秒)。世代カウンタで明示無効化もする。
 PAGE_TREE_CACHE_TTL = env.int("PAGE_TREE_CACHE_TTL", default=300)
+
+# エクスポート/Webhook を非同期(RQ ワーカー)で処理するか。
+# 既定は同期(開発/テスト/CI は Redis なしで動く)。本番は RQ ワーカーを立てて 1 にする。
+EXPORTS_ASYNC = env.bool("EXPORTS_ASYNC", default=False)
