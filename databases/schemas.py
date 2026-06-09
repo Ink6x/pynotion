@@ -33,6 +33,10 @@ class RowUpdateIn(Schema):
     values: dict = {}
 
 
+class RowMoveIn(Schema):
+    after_id: uuid.UUID | None = None
+
+
 class ViewCreateIn(Schema):
     name: str = "ビュー"
     type: str = "table"

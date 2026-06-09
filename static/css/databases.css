@@ -116,8 +116,111 @@
   color: var(--color-text);
 }
 
-/* プロパティ追加ポップオーバー */
-.db-add-col-pop {
+/* ビュー切替バー */
+.db-views {
+  display: flex;
+  gap: var(--space-xs);
+  align-items: center;
+  margin-bottom: var(--space-s);
+  border-bottom: 1px solid var(--color-border-subtle);
+  padding-bottom: var(--space-xs);
+}
+
+.db-view-tab,
+.db-add-view {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: var(--space-xs) var(--space-s);
+  border-radius: var(--radius-s);
+  font-size: var(--text-body-size);
+}
+
+.db-view-tab:hover,
+.db-add-view:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.db-view-tab.active {
+  color: var(--color-text);
+  font-weight: 600;
+  background: var(--color-surface);
+}
+
+/* ボード */
+.db-board {
+  display: flex;
+  gap: var(--space-m);
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: var(--space-s);
+}
+
+.db-lane {
+  flex: 0 0 260px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-m);
+  padding: var(--space-s);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-s);
+  min-height: 80px;
+}
+
+.db-lane-over {
+  outline: 2px dashed var(--color-accent);
+  outline-offset: -2px;
+}
+
+.db-lane-header {
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: var(--text-small-size);
+}
+
+.db-lane-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-height: 24px;
+}
+
+.db-card {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-s);
+  padding: var(--space-s);
+  cursor: grab;
+  font-size: var(--text-body-size);
+  color: var(--color-text);
+  box-shadow: var(--shadow-1);
+}
+
+.db-card:active {
+  cursor: grabbing;
+}
+
+.db-add-card {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  text-align: left;
+  padding: var(--space-xs);
+  font-size: var(--text-small-size);
+  border-radius: var(--radius-s);
+}
+
+.db-add-card:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+/* ポップオーバー (列追加・ビュー追加) */
+.db-pop {
   display: flex;
   flex-direction: column;
   gap: var(--space-s);
@@ -125,8 +228,8 @@
   min-width: 220px;
 }
 
-.db-add-col-pop input,
-.db-add-col-pop select {
+.db-pop input,
+.db-pop select {
   width: 100%;
   box-sizing: border-box;
   padding: var(--space-s);
