@@ -34,6 +34,8 @@ prod = [
     "redis>=5.0",
     # 本番の Redis チャネルレイヤ (複数ワーカー間で WebSocket をブロードキャスト)
     "channels-redis>=4.2",
+    # 非同期エクスポート / Webhook のタスクキュー (Redis 共有)。
+    "rq>=1.16",
 ]
 
 [build-system]
@@ -48,7 +50,7 @@ packages = []
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings.dev"
 python_files = ["test_*.py"]
-testpaths = ["pages/tests", "config/tests", "accounts/tests", "databases/tests"]
+testpaths = ["pages/tests", "config/tests", "accounts/tests", "databases/tests", "exports/tests"]
 markers = [
     "unit: 単体テスト",
     "integration: 統合テスト",

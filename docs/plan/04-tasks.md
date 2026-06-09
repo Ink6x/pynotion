@@ -136,12 +136,14 @@
 
 ### 4-C. 非同期エクスポート / Webhook(G)
 
-- [ ] `exports/` アプリ作成
-- [ ] RQ セットアップ(Redis 共有)
-- [ ] Markdown エクスポート(`serialize_block_tree` 走査 → md)
-- [ ] PDF エクスポート(WeasyPrint)+ 進捗通知(Channels で push)
-- [ ] Webhook 登録 + HMAC 署名付き配信
-- [ ] 指数バックオフ・リトライ・冪等性
+- [x] `exports/` アプリ作成(4-C-1)
+- [x] RQ セットアップ(Redis 共有、`EXPORTS_ASYNC` で本番=非同期 / 開発・テスト=同期。
+      同期パスは RQ/Redis を import しない)(4-C-1)
+- [x] Markdown エクスポート(`exports/markdown.py`、ブロックツリー → md。見出し/ToDo/
+      リスト/番号/引用/コード/トグル/区切り、ネスト・連番対応)(4-C-1)
+- [ ] PDF エクスポート(WeasyPrint)+ 進捗通知(Channels で push)(4-C-2、ネイティブ依存)
+- [ ] Webhook 登録 + HMAC 署名付き配信(4-C-2)
+- [ ] 指数バックオフ・リトライ・冪等性(4-C-2)
 
 ### 4-D. 文字単位の競合解決(CRDT / C-3b)— 4-A が go の場合のみ
 
